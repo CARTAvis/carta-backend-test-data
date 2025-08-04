@@ -65,3 +65,7 @@ Gaussian model added:
 Full 4D cube with Infs:
 
 `./make_image.py 64 64 8 4 -i positive -d 5`
+
+A synthetic FITS image with 10% of rows and 10% of columns randomly set to NaN values, using a fixed random seed (0) to ensure the output is reproducible:
+
+`./generate_fits.py 256 256 -s 0 -n row column -d 10`
