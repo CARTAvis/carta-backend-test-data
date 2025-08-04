@@ -4,6 +4,10 @@
 
 This repository contains generated test files used for validating and benchmarking the [carta-backend](https://github.com/CARTAvis/carta-backend). The files are stored using Git Large File Storage (Git LFS) to efficiently manage large files.
 
+##Regenerating Test Data
+
+`bash scripts/remake_files.sh`
+
 ## Generating Test Files with `make_image.py` in `image-generator`
 This script generates synthetic FITS files with optional NaNs, Infs, noise, patterns, and Gaussian models.
 
