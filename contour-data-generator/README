@@ -1,0 +1,129 @@
+# Generate Contours from FITS/HDF5 Images
+
+This Python script reads astronomical images from **FITS** or **HDF5** files, generates contour vertices for specified levels, and outputs one `.txt` file per contour level. It can also visualize contours overlaid on the image as JPG files.
+
+---
+
+## Requirements
+
+- Python 3.8+
+- Packages:
+
+```bash
+pip install numpy matplotlib scipy scikit-image
+pip install astropy   # For FITS support
+pip install h5py      # For HDF5 support
+```
+
+---
+
+## Quick Start
+
+Generate contour lines from an image and save them as text files:
+
+```bash
+python contour-generator.py example.fits --levels -2 -1 0 1 2 --formatted --show
+```
+
+This command:
+- Reads `example.fits`
+- Generates contours for levels -2, -1, 0, 1, 2
+- Saves human-readable contour text files per level in a `<basename>_contours/` folder
+- Saves JPG visualizations of contours overlaid on the image
+
+## Usage
+
+```bash
+python contour-generator.py <filename> [options]
+```
+
+### Positional arguments
+
+- `filename` – Path to input image file (`.fits`, `.hdf5`)
+
+### Optional arguments
+| Option                         | Description                                                              | Default  |
+| ------------------------------ | ------------------------------------------------------------------------ | -------- |
+| `--levels L1 L2 ...`           | Contour levels to generate. Can be negative, zero, or positive.          | `-1 0 1` |
+| `--smoothing none`             | No smoothing applied (currently not functional).                         | `none`   |
+| `--smoothing gaussian <sigma>` | Gaussian blur mode (defined but not currently applied).                  | `none`   |
+| `--smoothing block <factor>`   | Block averaging mode (defined but not currently applied).                | `none`   |
+| `--formatted`                  | Save output in a human-readable format with header and labeled vertices. | False    |
+| `--show`                       | Save JPG images with colored contour lines overlayed on the original image. | False    |
+
+---
+
+## Examples
+
+### 1. Basic usage (default levels, no smoothing)
+
+```bash
+python contour-generator.py example.fits
+```
+
+### 2. Specify contour levels
+
+```bash
+python contour-generator.py example.fits --levels -2 -1 0 1 2
+```
+
+### 3. Human-readable output
+
+```bash
+python contour-generator.py example.fits --formatted
+```
+
+Example `.txt` output:
+```
+# Contour Level: 0
+# Number of vertices: 156
+# X, Y coordinates
+
+12.345678, 45.678912
+13.456789, 46.789123
+...
+```
+
+### 4. Visualize contours as JPG
+
+```bash
+python contour-generator.py example.fits --show
+```
+
+Output:
+- Creates a folder `<basename>_contours/`
+- Saves JPG files showing the grayscale image with red contour lines overlaid
+- One JPG file per contour level
+
+### 5. Combine options
+
+```bash
+python contour-generator.py example.h5 --levels -2 -1 0 1 2 --formatted --show
+```
+
+Output:
+- One `.txt` file per contour level in `<basename>_contours/` folder
+- One `.jpg` file per contour level in `<basename>_contours/` folder
+- Text files include formatted header with level and vertex count
+
+## Notes
+
+**Output structure:**
+- Contour files are saved in a folder named `<basename>_contours/`
+- Each level gets one `.txt` file: `<basename>_level_<level>.txt`
+- If `--show` is used, one `.jpg` file is created per level: `<basename>_level_<level>.jpg`
+
+**Coordinate system:**
+- Coordinates are in pixel space (starting from image origin)
+- Output coordinates have 0.5 offset applied (shifted to pixel centers)
+
+**Supported file formats:**
+- `.fits`, `.fit` (FITS files)
+- `.hdf5`, `.h5` (HDF5 files - automatically finds first available dataset)
+
+**Data handling:**
+- NaN values are replaced with 0 during image loading
+- Multi-dimensional data: if >2D, uses the first slice
+
+**Currently disabled features:**
+- Smoothing options (Gaussian and block averaging) are defined in the code but not applied in the contour generation pipeline. They remain available for future implementation.
