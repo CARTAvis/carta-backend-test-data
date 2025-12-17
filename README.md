@@ -2,7 +2,10 @@
 
 ## Overview
 
-This repository contains generated test files used for validating and benchmarking the [carta-backend](https://github.com/CARTAvis/carta-backend). The files are stored using Git Large File Storage (Git LFS) to efficiently manage large files.
+This repository contains generated test files used for validating and benchmarking the [carta-backend](https://github.com/CARTAvis/carta-backend). 
+The files are stored using Git Large File Storage (Git LFS) to efficiently manage large files.
+
+An optional FITS → HDF5 conversion step is also supported.
 
 ##Regenerating Test Data
 
@@ -50,9 +53,9 @@ Creates a 256x256 image with default values.
 | --gaussian-model | float list | Define Gaussian blobs. Format: n x y amp fwhm_x fwhm_y pa_deg [repeat] |
 
 ### Examples
-Basic Gaussian noise (2D):
+Basic Gaussian noise (2D), makes a futs and hdf5 file:
 
-`./make_image.py 256 256 -o noise.fits`
+`./make_image.py 256 256 --hdf5`
 
 NaNs randomly in pixels:
 
@@ -72,4 +75,4 @@ Full 4D cube with Infs:
 
 A synthetic FITS image with 10% of rows and 10% of columns randomly set to NaN values, using a fixed random seed (0) to ensure the output is reproducible:
 
-`./generate_fits.py 256 256 -s 0 -n row column -d 10`
+`./make_image.py 256 256 -s 0 -n row column -d 10`

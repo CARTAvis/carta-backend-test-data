@@ -1,0 +1,99 @@
+# Tile Data Generator
+
+This Python script generates 2D tile data and writes it to a text file.  
+You can use it to create uniform grids (a single repeated value) or smooth gradients that progress horizontally, vertically, or diagonally across the grid.
+
+---
+
+## Requirements
+
+- Python 3.7 or higher
+- No external dependencies required
+
+---
+
+## Usage
+
+Run the script from the command line:
+
+```bash
+python3 generate_tile_gradient.py --width <columns> --height <rows> --mode <mode> [options]
+```
+
+### Required arguments
+
+| Argument   | Description                                                         |
+| ---------- | ------------------------------------------------------------------- |
+| `--width`  | Number of columns in the grid                                       |
+| `--height` | Number of rows in the grid                                          |
+| `--mode`   | Either `single` (repeated value) or `gradient` (progressive values) |
+
+### Optional arguments
+
+| Argument      | Default         | Description                                                     |
+| ------------- | --------------- | --------------------------------------------------------------- |
+| `--output`    | `tile_data.txt` | Name of the output file                                         |
+| `--start`     | `0.0`           | Starting value for gradient mode                                |
+| `--step`      | `1.0`           | Increment value between tiles in gradient mode                  |
+| `--value`     | `0.0`           | Value to repeat in single mode                                  |
+| `--direction` | `horizontal`    | Direction of gradient (`horizontal`, `vertical`, or `diagonal`) |
+
+### Examples
+
+#### Generate a single-value grid
+
+```bash
+python3 generate_tile_gradient.py --width 5 --height 3 --mode single --value 9
+
+```
+
+Output (tile_data.txt)
+```
+9.00 9.00 9.00 9.00 9.00
+9.00 9.00 9.00 9.00 9.00
+9.00 9.00 9.00 9.00 9.00
+```
+
+#### Generate a horizontal gradient
+
+```bash
+python3 generate_tile_gradient.py --width 5 --height 3 --mode gradient --start 0 --step 2 --direction horizontal
+```
+
+Output
+```
+0.00 2.00 4.00 6.00 8.00
+0.00 2.00 4.00 6.00 8.00
+0.00 2.00 4.00 6.00 8.00
+```
+
+#### Generate a vertical gradient
+
+```bash
+python3 generate_tile_gradient.py --width 4 --height 4 --mode gradient --start 10 --step 5 --direction vertical
+```
+
+Output
+```
+10.00 10.00 10.00 10.00
+15.00 15.00 15.00 15.00
+20.00 20.00 20.00 20.00
+25.00 25.00 25.00 25.00
+```
+
+#### Generate a diagonal gradient
+
+```bash
+python3 generate_tile_gradient.py --width 4 --height 4 --mode gradient --start 0 --step 1.5 --direction diagonal
+```
+
+Output
+```
+0.00 1.50 3.00 4.50
+1.50 3.00 4.50 6.00
+3.00 4.50 6.00 7.50
+4.50 6.00 7.50 9.00
+```
+
+## Author
+Created by Michaela van Zyl for the Instituite for Data-Intensive Astronomy (IDIA)

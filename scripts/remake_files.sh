@@ -4,9 +4,22 @@ set -e
 
 # Path to the generator script
 GEN=./image-generator/make_image.py
-OUTDIR=images/fits
 
-mkdir -p "$OUTDIR"
+# Hdf5ImageTest + FitsImageTest
+# BasicLoadingTest + ExampleFriendTest + CorrectShape2dImage
+$GEN 10 10 --hdf5
+
+# CorrectShape3dImage
+$GEN 10 10 10 --hdf5  
+
+# CorrectShapeDegenerate3dImages
+$GEN 10 10 10 1 --hdf5
+$GEN 10 10 1 10 --hdf5
+
+# CursorSpatialProfileTest 
+# SmallFitsProfile
+$GEN 10 10 -s 0 -n row column -d 10
+
 
 # 128x128 Gaussian model, one component
 $GEN 128 128 --gaussian-model 1 64 64 1.0 30 30 0 -o $OUTDIR/128_128_gaussian_model_one_component.fits
