@@ -53,9 +53,6 @@ def build_output_name(args, ext):
     # Join everything with underscores
     name = "_".join(parts)
 
-
-
-
     return name + ext
 
 def fits_to_hdf5(fits_path, hdf5_path):
@@ -67,7 +64,7 @@ def fits_to_hdf5(fits_path, hdf5_path):
 
                 # Write FITS data (if present)
                 if hdu.data is not None:
-                    grp.create_dataset("data", data=hdu.data)
+                    grp.create_dataset("DATA", data=hdu.data)
 
                 # Write FITS header as attributes
                 for key, value in hdu.header.items():
