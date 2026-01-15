@@ -64,14 +64,21 @@ def fits_to_hdf5(fits_path, hdf5_path):
 
                 # Write FITS data (if present)
                 if hdu.data is not None:
-                    grp.create_dataset("DATA", data=hdu.data)
+                    # Store data with proper axis order (C-order by default in HDF5)
+                    grp.create_dataset("DATA", data=hdu.data, chunks=True)
 
                 # Write FITS header as attributes
                 for key, value in hdu.header.items():
                     try:
+                        # Truncate long strings to avoid HDF5 limitations
+                        if isinstance(value, str) and len(value) > 1024:
+                            value = value[:1024]
                         grp.attrs[key] = value
                     except Exception:
-                        grp.attrs[key] = str(value)  # fallback
+                        try:
+                            grp.attrs[key] = str(value)
+                        except Exception:
+                            pass  # Skip attributes that can't be stored
 
 def make_image(args):
     dims = tuple(args.dimensions)
