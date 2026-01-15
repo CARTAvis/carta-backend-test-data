@@ -60,8 +60,8 @@ def fits_to_hdf5(fits_path, hdf5_path):
     with fits.open(fits_path) as hdul:
         with h5py.File(hdf5_path, "w") as h5f:
             for i, hdu in enumerate(hdul):
-                # Create group for each HDU with HDU_i naming convention
-                grp = h5f.create_group(f"HDU_{i}")
+                # Create group for each HDU using numeric naming convention
+                grp = h5f.create_group(str(i))
 
                 # Write FITS data (if present) with lowercase 'data' name
                 if hdu.data is not None:
