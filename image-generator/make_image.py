@@ -10,7 +10,7 @@ import numpy as np
 from astropy.io import fits
 from astropy.modeling.models import Gaussian2D
 from astropy.stats import gaussian_fwhm_to_sigma
-import h5py
+import subprocess
 from pathlib import Path
 
 NAN_OPTIONS = ("pixel", "row", "column", "channel", "stokes", "image")
@@ -56,35 +56,37 @@ def build_output_name(args, ext):
     return name + ext
 
 def fits_to_hdf5(fits_path, hdf5_path):
-    """Convert a FITS file to HDF5, preserving HDUs in standard FITS-HDF5 format."""
-    with fits.open(fits_path) as hdul:
-        with h5py.File(hdf5_path, "w") as h5f:
-            for i, hdu in enumerate(hdul):
-                # Create group for each HDU using numeric naming convention
-                grp = h5f.create_group(str(i))
+    """
+    Convert a FITS file to HDF5 using the fits2idia utility.
+    
+    This uses the official CARTAvis fits2idia tool which is:
+    - Battle-tested and known to produce compatible HDF5 files
+    - Optimized for performance with OpenMP parallelization
+    - Handles all edge cases for FITS to IDIA-HDF5 conversion
+    - No need to maintain custom statistics/chunking logic
+    """
+    try:
+        subprocess.run(
+            ["fits2idia", "-o", str(hdf5_path), str(fits_path)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "fits2idia executable not found. Please install it:\n"
+            "  Ubuntu/Debian: sudo apt install fits2idia\n"
+            "  macOS: brew install cartavis/tap/fits2idia\n"
+            "  Or build from: https://github.com/CARTAvis/fits2idia\n"
+            "  Or download AppImage from: https://github.com/CARTAvis/fits2idia/releases"
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"fits2idia conversion failed for {fits_path}:\n"
+            f"stdout: {e.stdout}\n"
+            f"stderr: {e.stderr}"
+        )
 
-                # Write FITS data (if present) with lowercase 'data' name
-                if hdu.data is not None:
-                    grp.create_dataset("DATA", data=hdu.data)
-
-                # Write FITS header as attributes on the group
-                for key, value in hdu.header.items():
-                    try:
-                        # Handle strings that are too long
-                        if isinstance(value, str) and len(value) > 1024:
-                            value = value[:1024]
-                        grp.attrs[key] = value
-                    except Exception:
-                        try:
-                            grp.attrs[key] = str(value)
-                        except Exception:
-                            pass  # Skip attributes that can't be stored
-                
-                # Also store key dimensional attributes at group level for easier access
-                if hdu.data is not None:
-                    grp.attrs["NDIM"] = len(hdu.data.shape)
-                    for j, size in enumerate(hdu.data.shape):
-                        grp.attrs[f"DIM_{j}"] = size
 
 def make_image(args):
     dims = tuple(args.dimensions)
