@@ -56,20 +56,21 @@ def build_output_name(args, ext):
     return name + ext
 
 def fits_to_hdf5(fits_path, hdf5_path):
-    """Convert a FITS file to HDF5, preserving HDUs."""
+    """Convert a FITS file to HDF5, preserving HDUs in standard FITS-HDF5 format."""
     with fits.open(fits_path) as hdul:
         with h5py.File(hdf5_path, "w") as h5f:
             for i, hdu in enumerate(hdul):
+                # Create group for each HDU
                 grp = h5f.create_group(str(i))
 
                 # Write FITS data (if present)
                 if hdu.data is not None:
                     grp.create_dataset("DATA", data=hdu.data)
 
-                # Write FITS header as attributes
+                # Write FITS header as attributes on the group
                 for key, value in hdu.header.items():
                     try:
-                        # Truncate long strings to avoid HDF5 limitations
+                        # Handle strings that are too long
                         if isinstance(value, str) and len(value) > 1024:
                             value = value[:1024]
                         grp.attrs[key] = value
@@ -78,6 +79,12 @@ def fits_to_hdf5(fits_path, hdf5_path):
                             grp.attrs[key] = str(value)
                         except Exception:
                             pass  # Skip attributes that can't be stored
+                
+                # Also store key dimensional attributes at group level for easier access
+                if hdu.data is not None:
+                    grp.attrs["NDIM"] = len(hdu.data.shape)
+                    for j, size in enumerate(hdu.data.shape):
+                        grp.attrs[f"DIM_{j}"] = size
 
 def make_image(args):
     dims = tuple(args.dimensions)
