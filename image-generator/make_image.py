@@ -59,18 +59,35 @@ def fits_to_hdf5(fits_path, hdf5_path):
     """Convert a FITS file to HDF5, preserving HDUs."""
     with fits.open(fits_path) as hdul:
         with h5py.File(hdf5_path, "w") as h5f:
-            for i, hdu in enumerate(hdul):
-                grp = h5f.create_group(str(i))
-
-                # Write FITS data (if present)
+            # Store the primary HDU data and header at root level
+            primary_hdu = hdul[0]
+            
+            if primary_hdu.data is not None:
+                # Store data directly at root level
+                h5f.create_dataset("DATA", data=primary_hdu.data)
+            
+            # Store header as root-level attributes
+            for key, value in primary_hdu.header.items():
+                try:
+                    # Truncate long strings to avoid HDF5 limitations
+                    if isinstance(value, str) and len(value) > 1024:
+                        value = value[:1024]
+                    h5f.attrs[key] = value
+                except Exception:
+                    try:
+                        h5f.attrs[key] = str(value)
+                    except Exception:
+                        pass  # Skip attributes that can't be stored
+            
+            # Store any extension HDUs in groups
+            for i, hdu in enumerate(hdul[1:], 1):
+                grp = h5f.create_group(f"HDU_{i}")
+                
                 if hdu.data is not None:
-                    # Store data with proper axis order (C-order by default in HDF5)
-                    grp.create_dataset("DATA", data=hdu.data, chunks=True)
-
-                # Write FITS header as attributes
+                    grp.create_dataset("DATA", data=hdu.data)
+                
                 for key, value in hdu.header.items():
                     try:
-                        # Truncate long strings to avoid HDF5 limitations
                         if isinstance(value, str) and len(value) > 1024:
                             value = value[:1024]
                         grp.attrs[key] = value
@@ -78,7 +95,7 @@ def fits_to_hdf5(fits_path, hdf5_path):
                         try:
                             grp.attrs[key] = str(value)
                         except Exception:
-                            pass  # Skip attributes that can't be stored
+                            pass
 
 def make_image(args):
     dims = tuple(args.dimensions)
