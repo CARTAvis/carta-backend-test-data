@@ -65,7 +65,7 @@ def fits_to_hdf5(fits_path, hdf5_path):
 
                 # Write FITS data (if present) with lowercase 'data' name
                 if hdu.data is not None:
-                    grp.create_dataset("data", data=hdu.data)
+                    grp.create_dataset("DATA", data=hdu.data)
 
                 # Write FITS header as attributes on the group
                 for key, value in hdu.header.items():
