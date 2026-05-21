@@ -1,0 +1,258 @@
+# Contour Level: 1
+# Part: 1
+# Number of vertices: 3
+# X, Y coordinates
+
+6.177421, 0.500000
+6.500000, 0.664479
+7.351734, 0.500000
+
+# Contour Level: 1
+# Part: 2
+# Number of vertices: 3
+# X, Y coordinates
+
+9.500000, 1.481580
+9.459220, 1.500000
+9.500000, 1.551699
+
+# Contour Level: 1
+# Part: 3
+# Number of vertices: 4
+# X, Y coordinates
+
+9.500000, 3.112459
+9.169599, 3.500000
+9.260396, 4.500000
+9.500000, 4.659400
+
+# Contour Level: 1
+# Part: 4
+# Number of vertices: 3
+# X, Y coordinates
+
+9.500000, 7.261670
+8.999403, 7.500000
+9.500000, 8.000597
+
+# Contour Level: 1
+# Part: 5
+# Number of vertices: 3
+# X, Y coordinates
+
+6.463865, 9.500000
+5.500000, 9.469506
+5.459762, 9.500000
+
+# Contour Level: 1
+# Part: 6
+# Number of vertices: 3
+# X, Y coordinates
+
+2.213825, 9.500000
+1.500000, 9.135159
+1.191476, 9.500000
+
+# Contour Level: 1
+# Part: 7
+# Number of vertices: 5
+# X, Y coordinates
+
+1.254874, 2.500000
+1.500000, 2.732581
+1.680377, 2.500000
+1.500000, 2.223453
+1.254874, 2.500000
+
+# Contour Level: 1
+# Part: 8
+# Number of vertices: 7
+# X, Y coordinates
+
+1.314668, 4.500000
+1.500000, 4.688787
+2.500000, 4.756142
+3.112642, 4.500000
+2.500000, 4.270198
+1.500000, 4.201745
+1.314668, 4.500000
+
+# Contour Level: 1
+# Part: 9
+# Number of vertices: 7
+# X, Y coordinates
+
+6.241515, 4.500000
+6.500000, 4.945477
+7.500000, 5.259568
+7.989863, 4.500000
+7.500000, 4.040518
+6.500000, 4.283119
+6.241515, 4.500000
+
+# Contour Level: 1
+# Part: 10
+# Number of vertices: 7
+# X, Y coordinates
+
+2.245849, 6.500000
+2.487631, 7.500000
+2.500000, 7.503946
+2.502443, 7.500000
+2.830772, 6.500000
+2.500000, 6.076007
+2.245849, 6.500000
+
+# Contour Level: 1
+# Part: 11
+# Number of vertices: 7
+# X, Y coordinates
+
+6.183248, 6.500000
+6.500000, 6.759899
+7.500000, 7.331435
+7.742631, 6.500000
+7.500000, 5.986863
+6.500000, 5.994220
+6.183248, 6.500000
+
+# Contour Level: 1
+# Part: 12
+# Number of vertices: 5
+# X, Y coordinates
+
+4.163099, 7.500000
+4.500000, 7.951156
+4.761584, 7.500000
+4.500000, 6.949439
+4.163099, 7.500000
+
+# Contour Level: 1
+# Part: 1
+# Number of vertices: 3
+# X, Y coordinates
+
+6.177421, 0.500000
+6.500000, 0.664479
+7.351734, 0.500000
+
+# Contour Level: 1
+# Part: 2
+# Number of vertices: 3
+# X, Y coordinates
+
+9.500000, 1.481580
+9.459220, 1.500000
+9.500000, 1.551699
+
+# Contour Level: 1
+# Part: 3
+# Number of vertices: 4
+# X, Y coordinates
+
+9.500000, 3.112459
+9.169599, 3.500000
+9.260396, 4.500000
+9.500000, 4.659400
+
+# Contour Level: 1
+# Part: 4
+# Number of vertices: 3
+# X, Y coordinates
+
+9.500000, 7.261670
+8.999403, 7.500000
+9.500000, 8.000597
+
+# Contour Level: 1
+# Part: 5
+# Number of vertices: 3
+# X, Y coordinates
+
+6.463865, 9.500000
+5.500000, 9.469506
+5.459762, 9.500000
+
+# Contour Level: 1
+# Part: 6
+# Number of vertices: 3
+# X, Y coordinates
+
+2.213825, 9.500000
+1.500000, 9.135159
+1.191476, 9.500000
+
+# Contour Level: 1
+# Part: 7
+# Number of vertices: 5
+# X, Y coordinates
+
+1.254874, 2.500000
+1.500000, 2.732581
+1.680377, 2.500000
+1.500000, 2.223453
+1.254874, 2.500000
+
+# Contour Level: 1
+# Part: 8
+# Number of vertices: 7
+# X, Y coordinates
+
+1.314668, 4.500000
+1.500000, 4.688787
+2.500000, 4.756142
+3.112642, 4.500000
+2.500000, 4.270198
+1.500000, 4.201745
+1.314668, 4.500000
+
+# Contour Level: 1
+# Part: 9
+# Number of vertices: 7
+# X, Y coordinates
+
+6.241515, 4.500000
+6.500000, 4.945477
+7.500000, 5.259568
+7.989863, 4.500000
+7.500000, 4.040518
+6.500000, 4.283119
+6.241515, 4.500000
+
+# Contour Level: 1
+# Part: 10
+# Number of vertices: 7
+# X, Y coordinates
+
+2.245849, 6.500000
+2.487631, 7.500000
+2.500000, 7.503946
+2.502443, 7.500000
+2.830772, 6.500000
+2.500000, 6.076007
+2.245849, 6.500000
+
+# Contour Level: 1
+# Part: 11
+# Number of vertices: 7
+# X, Y coordinates
+
+6.183248, 6.500000
+6.500000, 6.759899
+7.500000, 7.331435
+7.742631, 6.500000
+7.500000, 5.986863
+6.500000, 5.994220
+6.183248, 6.500000
+
+# Contour Level: 1
+# Part: 12
+# Number of vertices: 5
+# X, Y coordinates
+
+4.163099, 7.500000
+4.500000, 7.951156
+4.761584, 7.500000
+4.500000, 6.949439
+4.163099, 7.500000
+
