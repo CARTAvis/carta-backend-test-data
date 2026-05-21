@@ -22,6 +22,12 @@ def load_image(filename: str) -> np.ndarray:
     if ext in [".fits", ".fit"]:
         with fits.open(filename) as hdul:
             data = hdul[0].data.astype(np.float32)
+            header = hdul[0].header
+        
+            x_offset = header.get('CRPIX1', 0)
+            y_offset = header.get('CRPIX2', 0)
+            
+            print(f"FITS Header - CRPIX1 (X): {x_offset}, CRPIX2 (Y): {y_offset}")
     elif ext in [".h5", ".hdf5"]:
         with h5py.File(filename, "r") as f:
             # Try to find the first dataset in the file
@@ -45,7 +51,6 @@ def load_image(filename: str) -> np.ndarray:
     if data.ndim > 2:
         data = data[0]
     return np.nan_to_num(data)
-
 
 # -------------------------------
 # Smoothing
@@ -251,7 +256,7 @@ def write_contour_files(level: float, base: str, vertices: list, indices: list, 
         file_name = f"{base}_level_{level}.txt"
         file_path = os.path.join(folder_name, file_name)
 
-        with open(file_path, "a") as f:
+        with open(file_path, "w") as f:
             if formatted:
                 f.write(f"# Contour Level: {level}\n")
                 f.write(f"# Part: {idx_num+1}\n")
@@ -265,7 +270,7 @@ def write_contour_files(level: float, base: str, vertices: list, indices: list, 
                     x, y = contour_vertices[i], contour_vertices[i + 1]
                     f.write(f"{x:.6f} {y:.6f}\n")
             f.write(f"\n")
-        print(f"✅ Saved contour to: {file_name}")
+        # print(f"✅ Saved contour to: {file_name}")
 
 # def save_contours_to_file(file_name: str, levels: list, vertex_data: list, index_data: list):
 #     with open(file_name, 'w') as file:
@@ -338,7 +343,9 @@ def main():
     # print(f"Applying smoothing: {smoothing_mode} ({smoothing_value})")
     # smoothed = apply_smoothing(image, smoothing_mode, smoothing_value)
 
-    base = os.path.splitext(os.path.basename(args.filename))[0]
+    base_name = os.path.splitext(os.path.basename(args.filename))[0]
+    file_ext = os.path.splitext(args.filename)[1].lower().lstrip('.')
+    base = f"{base_name}_{file_ext}"
 
     for level in args.levels:
         print(f"Generating contours for levels: {level}")
