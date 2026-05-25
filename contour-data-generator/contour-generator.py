@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""
-Generate contour lines from FITS or HDF5 images.
-Outputs one .txt file per contour level and optionally a JPG visualization.
-"""
 
 import argparse
 import math
 import numpy as np
 import h5py
 from astropy.io import fits
+from astropy.wcs import WCS
 from scipy.ndimage import gaussian_filter
 from skimage.measure import block_reduce
 import matplotlib.pyplot as plt
@@ -17,40 +14,101 @@ import os
 # -------------------------------
 # Image I/O
 # -------------------------------
-def load_image(filename: str) -> np.ndarray:
+HEADER_KEYS = (
+    'CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2',
+    'CDELT1', 'CDELT2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+    'CTYPE1', 'CTYPE2', 'EQUINOX', 'SIMPLE', 'BZERO', 'BSCALE', 'NAXIS',
+    'NAXIS1', 'NAXIS2'
+)
+
+
+def normalize_header_value(value):
+    if isinstance(value, bytes):
+        try:
+            return value.decode('ascii')
+        except UnicodeDecodeError:
+            return value.decode('utf-8', errors='ignore')
+    if hasattr(value, 'item'):
+        return value.item()
+    return value
+
+
+def extract_metadata_from_header(header):
+    metadata = {}
+    for key in HEADER_KEYS:
+        if key in header:
+            metadata[key] = normalize_header_value(header[key])
+    return metadata
+
+
+def extract_metadata_from_hdf5(file_obj):
+    metadata = {}
+
+    def collect_attrs(name, obj):
+        if hasattr(obj, 'attrs'):
+            for key, value in obj.attrs.items():
+                key_up = key.upper()
+                if key_up in HEADER_KEYS and key_up not in metadata:
+                    metadata[key_up] = normalize_header_value(value)
+
+    file_obj.visititems(collect_attrs)
+    return metadata
+
+
+def find_first_dataset(group):
+    for key in group.keys():
+        item = group[key]
+        if isinstance(item, h5py.Dataset):
+            return item
+        if isinstance(item, h5py.Group):
+            result = find_first_dataset(item)
+            if result is not None:
+                return result
+    return None
+
+
+def load_image(filename: str) -> tuple[np.ndarray, dict]:
     ext = os.path.splitext(filename)[1].lower()
+    metadata = {}
+
     if ext in [".fits", ".fit"]:
         with fits.open(filename) as hdul:
             data = hdul[0].data.astype(np.float32)
-            header = hdul[0].header
-        
-            x_offset = header.get('CRPIX1', 0)
-            y_offset = header.get('CRPIX2', 0)
-            
+            metadata = extract_metadata_from_header(hdul[0].header)
+            x_offset = metadata.get('CRPIX1', 0)
+            y_offset = metadata.get('CRPIX2', 0)
             print(f"FITS Header - CRPIX1 (X): {x_offset}, CRPIX2 (Y): {y_offset}")
     elif ext in [".h5", ".hdf5"]:
         with h5py.File(filename, "r") as f:
-            # Try to find the first dataset in the file
-            def first_dataset(g):
-                for key in g.keys():
-                    if isinstance(g[key], h5py.Dataset):
-                        return g[key][()]
-                    elif isinstance(g[key], h5py.Group):
-                        result = first_dataset(g[key])
-                        if result is not None:
-                            return result
-                return None
-            data = first_dataset(f)
-            if data is None:
+            dataset = find_first_dataset(f)
+            if dataset is None:
                 raise ValueError("No dataset found in HDF5 file.")
-            data = np.array(data, dtype=np.float32)
+            data = np.array(dataset[()], dtype=np.float32)
+            metadata = extract_metadata_from_hdf5(f)
+            if metadata:
+                print(f"HDF5 metadata keys: {', '.join(sorted(metadata.keys()))}")
     else:
         raise ValueError(f"Unsupported file format: {ext}")
 
     # Ensure 2D
     if data.ndim > 2:
         data = data[0]
-    return np.nan_to_num(data)
+
+    return np.nan_to_num(data), metadata
+
+
+def metadata_to_wcs(metadata):
+    if not metadata:
+        return None
+
+    header = fits.Header()
+    for key, value in metadata.items():
+        header[key] = value
+
+    try:
+        return WCS(header)
+    except Exception:
+        return None
 
 # -------------------------------
 # Smoothing
@@ -235,8 +293,82 @@ def generate_contours(image: np.ndarray, smoothing_mode: str, level: float):
 # -------------------------------
 # Output Writing
 # -------------------------------
-def write_contour_files(level: float, base: str, vertices: list, indices: list, formatted: bool):
+def write_contour_binary(folder_name: str, level: float, base: str, vertices: list, indices: list):
+    if not os.path.isdir(folder_name):
+        os.mkdir(folder_name)
+        print(f"Folder '{folder_name}' created successfully.")
+    
+    # If no indices, treat entire list as a single contour
+    if not indices:
+        indices = [0]
+
+    # append end marker
+    indices_sorted = sorted(indices)
+    indices_sorted.append(len(vertices))
+
+    for idx_num in range(len(indices_sorted)-1):
+        start = indices_sorted[idx_num]
+        end = indices_sorted[idx_num+1]
+        contour_vertices = vertices[start:end]
+        
+        # Convert to numpy array and cast to float32 (little-endian)
+        data_to_save = np.array(contour_vertices, dtype=np.float32)
+        
+        # Write binary file with .bin extension
+        file_name = f"{base}_level_{level}.bin"
+        file_path = os.path.join(folder_name, file_name)
+        
+        with open(file_path, 'wb') as f:
+            # Write header
+            f.write(b'CTRN')  # Magic number (4 bytes)
+            f.write(np.uint32(1).tobytes())  # Version 1 (4 bytes, little-endian)
+            f.write(np.uint32(len(contour_vertices) // 2).tobytes())  # Num coordinate pairs (4 bytes)
+            f.write(b'\x00\x00\x00\x00')  # Reserved (4 bytes)
+            
+            # Write coordinate data (float32, little-endian)
+            data_to_save.astype(np.float32).tobytes(order='C')
+            f.write(data_to_save.astype(np.float32).tobytes())
+        
+        # print(f"✅ Saved binary contour to: {file_name}")
+
+
+def read_contour_binary(file_path: str) -> np.ndarray:
+    with open(file_path, 'rb') as f:
+        # Read and validate header
+        magic = f.read(4)
+        if magic != b'CTRN':
+            raise ValueError(f"Invalid binary file: magic number mismatch (expected 'CTRN', got {magic})")
+        
+        version = np.frombuffer(f.read(4), dtype=np.uint32, count=1)[0]
+        if version != 1:
+            raise ValueError(f"Unsupported binary format version: {version}")
+        
+        num_coords = np.frombuffer(f.read(4), dtype=np.uint32, count=1)[0]
+        reserved = f.read(4)  # Skip reserved bytes
+        
+        # Read coordinate data
+        data = np.frombuffer(f.read(), dtype=np.float32)
+        
+        if len(data) != num_coords * 2:
+            raise ValueError(f"Data size mismatch: expected {num_coords * 2} floats, got {len(data)}")
+    
+    # Reshape to coordinate pairs (N, 2) if needed
+    return data.reshape(-1, 2) if len(data) > 0 else data
+
+
+def write_contour_files(level: float, base: str, vertices: list, indices: list, formatted: bool, wcs=None, output_format: str = "text"):
     folder_name = base
+    
+    if output_format == "binary":
+        write_contour_binary(folder_name, level, os.path.basename(base), vertices, indices)
+    elif output_format == "both":
+        write_contour_binary(folder_name, level, os.path.basename(base), vertices, indices)
+        write_contour_text(folder_name, level, base, vertices, indices, formatted, wcs)
+    else:  # text or default
+        write_contour_text(folder_name, level, base, vertices, indices, formatted, wcs)
+
+
+def write_contour_text(folder_name: str, level: float, base: str, vertices: list, indices: list, formatted: bool, wcs=None):
     if not os.path.isdir(folder_name):
         os.mkdir(folder_name)
         print(f"Folder '{folder_name}' created successfully.")
@@ -261,33 +393,46 @@ def write_contour_files(level: float, base: str, vertices: list, indices: list, 
                 f.write(f"# Contour Level: {level}\n")
                 f.write(f"# Part: {idx_num+1}\n")
                 f.write(f"# Number of vertices: {len(contour_vertices) // 2}\n")
-                f.write("# X, Y coordinates\n\n")
-                for i in range(0, len(contour_vertices), 2):
-                    x, y = contour_vertices[i], contour_vertices[i + 1]
-                    f.write(f"{x:.6f}, {y:.6f}\n")
+                if wcs is not None:
+                    f.write("# Columns: X_pixel, Y_pixel, RA, DEC\n\n")
+                    coords = np.array(contour_vertices).reshape(-1, 2)
+                    xs = coords[:, 0]
+                    ys = coords[:, 1]
+                    try:
+                        world = wcs.all_pix2world(xs, ys, 0)
+                        # world may be (N,2) or tuple; normalize
+                        if isinstance(world, tuple) or (isinstance(world, np.ndarray) and world.ndim == 2 and world.shape[1] == 2):
+                            if isinstance(world, tuple):
+                                lon, lat = world
+                            else:
+                                lon = world[:, 0]
+                                lat = world[:, 1]
+                        else:
+                            lon = [None] * len(xs)
+                            lat = [None] * len(xs)
+                    except Exception:
+                        lon = [None] * len(xs)
+                        lat = [None] * len(xs)
+
+                    for i in range(len(xs)):
+                        x, y = xs[i], ys[i]
+                        ra = lon[i]
+                        dec = lat[i]
+                        if ra is None or dec is None:
+                            f.write(f"{x:.6f}, {y:.6f}\n")
+                        else:
+                            f.write(f"{x:.6f}, {y:.6f}, {ra:.6f}, {dec:.6f}\n")
+                else:
+                    f.write("# X, Y coordinates\n\n")
+                    for i in range(0, len(contour_vertices), 2):
+                        x, y = contour_vertices[i], contour_vertices[i + 1]
+                        f.write(f"{x:.6f}, {y:.6f}\n")
             else:
                 for i in range(0, len(contour_vertices), 2):
                     x, y = contour_vertices[i], contour_vertices[i + 1]
                     f.write(f"{x:.6f} {y:.6f}\n")
             f.write(f"\n")
         # print(f"✅ Saved contour to: {file_name}")
-
-# def save_contours_to_file(file_name: str, levels: list, vertex_data: list, index_data: list):
-#     with open(file_name, 'w') as file:
-#         for l in range(len(levels)):
-#             file.write(f"LEVEL: {levels[l]}\n")
-#             file.write(f"VERTICES: {len(vertex_data[l]) // 2}\n")
-            
-#             # Write vertices as (x, y) pairs
-#             for v in range(0, len(vertex_data[l]), 2):
-#                 file.write(f"{vertex_data[l][v]} {vertex_data[l][v + 1]}\n")
-            
-#             file.write(f"INDICES: {len(index_data[l])}\n")
-#             for idx in index_data[l]:
-#                 file.write(f"{idx}\n")
-            
-#             file.write("---\n")  # Separator between levels
-#     print(f"✅ Saved: {file_name}")
 
 
 # -------------------------------
@@ -328,6 +473,9 @@ def main():
                         help="Smoothing mode: none | gaussian <sigma> | block <factor>")
     parser.add_argument("--formatted", action="store_true", help="Save human-readable contour files.")
     parser.add_argument("--show", action="store_true", help="Save contours overlay on images as JPG.")
+    parser.add_argument("--emit-world", action="store_true", help="Include world coordinates (WCS) in formatted output when available.")
+    parser.add_argument("--format", choices=["text", "binary", "both"], default="text",
+                        help="Output format: text (default), binary (compact .bin files), or both")
 
     args = parser.parse_args()
 
@@ -336,27 +484,43 @@ def main():
     smoothing_value = float(args.smoothing[1]) if len(args.smoothing) > 1 else 1.0
 
     print(f"Reading image: {args.filename}")
-    image = load_image(args.filename)
+    image, metadata = load_image(args.filename)
+    wcs = metadata_to_wcs(metadata)
 
     print(f"Image shape: {image.shape}")
+    if wcs is not None and wcs.has_celestial:
+        print("WCS detected: using coordinate metadata for consistency.")
+    elif metadata:
+        print("Header metadata found, but WCS could not be constructed.")
 
     # print(f"Applying smoothing: {smoothing_mode} ({smoothing_value})")
     # smoothed = apply_smoothing(image, smoothing_mode, smoothing_value)
 
     base_name = os.path.splitext(os.path.basename(args.filename))[0]
     file_ext = os.path.splitext(args.filename)[1].lower().lstrip('.')
-    base = f"{base_name}_{file_ext}"
+    
+    # Construct output directory name with smoothing mode
+    if file_ext == "fits":
+        if smoothing_mode == "none":
+            output_dir = f"{base_name}_contours"
+        else:
+            output_dir = f"{base_name}_{smoothing_mode}_contours"
+    else:  # hdf5
+        if smoothing_mode == "none":
+            output_dir = f"{base_name}_{file_ext}_contours"
+        else:
+            output_dir = f"{base_name}_{file_ext}_{smoothing_mode}_contours"
 
     for level in args.levels:
         print(f"Generating contours for levels: {level}")
-        vertices, indices = generate_contours(image, "none", level)
+        vertices, indices = generate_contours(image, smoothing_mode, level)
 
-        write_contour_files(level, base + "_contours", vertices, indices, args.formatted)
+        write_contour_files(level, output_dir, vertices, indices, args.formatted, wcs if args.emit_world else None, args.format)
 
     for level in args.levels:
         # write_contour_files(level, base, vertices, indices, args.formatted)
         if args.show:
-            show_contours(image, vertices, indices, level, base, f"{base}_contours")
+            show_contours(image, vertices, indices, level, base_name, f"{base_name}_contours")
 
 if __name__ == "__main__":
     main()

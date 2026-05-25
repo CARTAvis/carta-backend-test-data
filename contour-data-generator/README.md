@@ -52,6 +52,8 @@ python contour-generator.py <filename> [options]
 | `--smoothing block <factor>`   | Block averaging mode (defined but not currently applied).                | `none`   |
 | `--formatted`                  | Save output in a human-readable format with header and labeled vertices. | False    |
 | `--show`                       | Save JPG images with colored contour lines overlayed on the original image. | False    |
+| `--format {text,binary,both}`  | Output format: `text` (default), `binary` (compact .bin), or `both`.     | `text`   |
+| `--emit-world`                 | Include world coordinates (WCS) in formatted output when available.       | False    |
 
 ---
 
@@ -107,6 +109,62 @@ Output:
 - One `.txt` file per contour level in `<basename>_contours/` folder
 - One `.jpg` file per contour level in `<basename>_contours/` folder
 - Text files include formatted header with level and vertex count
+
+### 6. Binary format (compact storage)
+
+Generate contours in compact binary format using 32-bit floats:
+
+```bash
+python contour-generator.py example.fits --format binary
+```
+
+**Output:**
+- One `.bin` file per contour level: `<basename>_level_<level>.bin`
+- Binary format: float32, row-major (C-style), flat coordinate array
+
+**Reading binary files in Python:**
+```python
+import numpy as np
+
+# Read binary contour file
+data = np.fromfile('example_fits_level_0.bin', dtype=np.float32)
+
+# Reshape to coordinate pairs (N, 2)
+coords = data.reshape(-1, 2)
+print(coords.shape)  # (num_vertices, 2)
+
+x_values = coords[:, 0]
+y_values = coords[:, 1]
+```
+
+### 7. Generate both formats for migration
+
+```bash
+python contour-generator.py example.fits --format both
+```
+
+This generates both `.txt` and `.bin` files for the same contours, useful during migration.
+
+---
+
+## Binary Format Details
+
+The binary format stores coordinate pairs as a flat array of 32-bit floats:
+
+**Format Specification:**
+- **Data Type**: float32 (4 bytes per value)
+- **Layout**: Row-major order (C-style)
+- **Structure**: Flat array where every 2 consecutive values form [x, y]
+
+**Conversion Tool:**
+For migrating existing text contours to binary format:
+
+```bash
+python convert_to_binary.py ./contours             # Convert all .txt files
+python convert_to_binary.py ./contours --verify    # Verify binary files
+```
+
+See `BINARY_FORMAT_MIGRATION.md` for detailed migration guidance.
 
 ---
 
