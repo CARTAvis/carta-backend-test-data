@@ -315,7 +315,7 @@ def write_contour_binary(folder_name: str, level: float, base: str, vertices: li
         data_to_save = np.array(contour_vertices, dtype=np.float32)
         
         # Write binary file with .bin extension
-        file_name = f"{base}_level_{level}.bin"
+        file_name = f"level_{level}.bin"
         file_path = os.path.join(folder_name, file_name)
         
         with open(file_path, 'wb') as f:
