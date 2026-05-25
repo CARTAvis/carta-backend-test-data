@@ -273,27 +273,51 @@ def trace_level(image, width, height, scale, offset, level):
 
     return vertices, indices
 
-def generate_contours(image: np.ndarray, smoothing_mode: str, level: float):
-    vertex_map = []
-    index_map = []
+def generate_contours(image: np.ndarray, 
+                      smoothing_mode: str, 
+                      level: int, 
+                      smoothing_factor: float = 1.0, 
+                      decimation_factor: int = 1):
+    
+    scale = 1.0
+    offset = 0.0
+    processed_image = image.copy()
+    
+    if smoothing_mode == "gaussian" and smoothing_factor > 1.0:
+        kernel_width = int(smoothing_factor - 1)
+        smoothed = gaussian_filter(processed_image, sigma=smoothing_factor)
+        processed_image = smoothed[kernel_width:-kernel_width, kernel_width:-kernel_width]
+        offset = float(smoothing_factor - 1)
+        scale = 1.0
 
-    # contour level
-    vertex_map, index_map = trace_level(
-        image.flatten(),
-        image.shape[1],
-        image.shape[0],
-        scale=1.0,
-        offset=0.0,
+    elif smoothing_mode == "block" and smoothing_factor >= 1.0:
+        scale = float(smoothing_factor)
+        offset = 0.0
+        
+        processed_image = block_reduce(processed_image, 
+                                       block_size=(int(smoothing_factor), int(smoothing_factor)), 
+                                       func=np.mean)
+
+    if decimation_factor > 1:
+        processed_image = processed_image[::decimation_factor, ::decimation_factor]
+        scale *= decimation_factor
+
+    vertices, indices = trace_level(
+        processed_image.flatten(),
+        processed_image.shape[1],
+        processed_image.shape[0],
+        scale=scale,
+        offset=offset,
         level=level
     )
 
-    return vertex_map, index_map
+    return vertices, indices
 
 
 # -------------------------------
 # Output Writing
 # -------------------------------
-def write_contour_binary(folder_name: str, level: float, base: str, vertices: list, indices: list):
+def write_contour_binary(folder_name: str, level: int, base: str, vertices: list, indices: list):
     if not os.path.isdir(folder_name):
         os.mkdir(folder_name)
         print(f"Folder '{folder_name}' created successfully.")
@@ -356,7 +380,7 @@ def read_contour_binary(file_path: str) -> np.ndarray:
     return data.reshape(-1, 2) if len(data) > 0 else data
 
 
-def write_contour_files(level: float, base: str, vertices: list, indices: list, formatted: bool, wcs=None, output_format: str = "text"):
+def write_contour_files(level: int, base: str, vertices: list, indices: list, formatted: bool, wcs=None, output_format: str = "text"):
     folder_name = base
     
     if output_format == "binary":
