@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""
+Generate contour lines from FITS or HDF5 images.
+Outputs .txt or .bin file per contour level and optionally a JPG visualisation.
+"""
 
 import argparse
 import math
@@ -273,51 +277,27 @@ def trace_level(image, width, height, scale, offset, level):
 
     return vertices, indices
 
-def generate_contours(image: np.ndarray, 
-                      smoothing_mode: str, 
-                      level: int, 
-                      smoothing_factor: float = 1.0, 
-                      decimation_factor: int = 1):
-    
-    scale = 1.0
-    offset = 0.0
-    processed_image = image.copy()
-    
-    if smoothing_mode == "gaussian" and smoothing_factor > 1.0:
-        kernel_width = int(smoothing_factor - 1)
-        smoothed = gaussian_filter(processed_image, sigma=smoothing_factor)
-        processed_image = smoothed[kernel_width:-kernel_width, kernel_width:-kernel_width]
-        offset = float(smoothing_factor - 1)
-        scale = 1.0
+def generate_contours(image: np.ndarray, smoothing_mode: str, level: float):
+    vertex_map = []
+    index_map = []
 
-    elif smoothing_mode == "block" and smoothing_factor >= 1.0:
-        scale = float(smoothing_factor)
-        offset = 0.0
-        
-        processed_image = block_reduce(processed_image, 
-                                       block_size=(int(smoothing_factor), int(smoothing_factor)), 
-                                       func=np.mean)
-
-    if decimation_factor > 1:
-        processed_image = processed_image[::decimation_factor, ::decimation_factor]
-        scale *= decimation_factor
-
-    vertices, indices = trace_level(
-        processed_image.flatten(),
-        processed_image.shape[1],
-        processed_image.shape[0],
-        scale=scale,
-        offset=offset,
+    # contour level
+    vertex_map, index_map = trace_level(
+        image.flatten(),
+        image.shape[1],
+        image.shape[0],
+        scale=1.0,
+        offset=0.0,
         level=level
     )
 
-    return vertices, indices
+    return vertex_map, index_map
 
 
 # -------------------------------
 # Output Writing
 # -------------------------------
-def write_contour_binary(folder_name: str, level: int, base: str, vertices: list, indices: list):
+def write_contour_binary(folder_name: str, level: float, base: str, vertices: list, indices: list):
     if not os.path.isdir(folder_name):
         os.mkdir(folder_name)
         print(f"Folder '{folder_name}' created successfully.")
@@ -330,30 +310,27 @@ def write_contour_binary(folder_name: str, level: int, base: str, vertices: list
     indices_sorted = sorted(indices)
     indices_sorted.append(len(vertices))
 
-    for idx_num in range(len(indices_sorted)-1):
-        start = indices_sorted[idx_num]
-        end = indices_sorted[idx_num+1]
-        contour_vertices = vertices[start:end]
-        
-        # Convert to numpy array and cast to float32 (little-endian)
-        data_to_save = np.array(contour_vertices, dtype=np.float32)
-        
-        # Write binary file with .bin extension
-        file_name = f"level_{level}.bin"
-        file_path = os.path.join(folder_name, file_name)
-        
-        with open(file_path, 'wb') as f:
-            # Write header
+    file_name = f"{level}.bin"
+    file_path = os.path.join(folder_name, file_name)
+    
+    with open(file_path, 'wb') as f:
+        segment_count = len(indices_sorted) - 1
+        for idx_num in range(segment_count):
+            start = indices_sorted[idx_num]
+            end = indices_sorted[idx_num+1]
+            contour_vertices = vertices[start:end]
+            
+            # Convert to numpy array and cast to float32 (little-endian)
+            data_to_save = np.array(contour_vertices, dtype=np.float32)
+            
+            # Write header for this segment
             f.write(b'CTRN')  # Magic number (4 bytes)
             f.write(np.uint32(1).tobytes())  # Version 1 (4 bytes, little-endian)
             f.write(np.uint32(len(contour_vertices) // 2).tobytes())  # Num coordinate pairs (4 bytes)
             f.write(b'\x00\x00\x00\x00')  # Reserved (4 bytes)
             
             # Write coordinate data (float32, little-endian)
-            data_to_save.astype(np.float32).tobytes(order='C')
             f.write(data_to_save.astype(np.float32).tobytes())
-        
-        # print(f"✅ Saved binary contour to: {file_name}")
 
 
 def read_contour_binary(file_path: str) -> np.ndarray:
@@ -380,8 +357,11 @@ def read_contour_binary(file_path: str) -> np.ndarray:
     return data.reshape(-1, 2) if len(data) > 0 else data
 
 
-def write_contour_files(level: int, base: str, vertices: list, indices: list, formatted: bool, wcs=None, output_format: str = "text"):
+def write_contour_files(level: float, base: str, vertices: list, indices: list, formatted: bool, wcs=None, output_format: str = "text"):
+    """Write contour files in specified format (text or binary)."""
     folder_name = base
+
+    print(f"DEBUG: Level {level} | Total vertices in list: {len(vertices)}")
     
     if output_format == "binary":
         write_contour_binary(folder_name, level, os.path.basename(base), vertices, indices)
@@ -401,21 +381,25 @@ def write_contour_text(folder_name: str, level: float, base: str, vertices: list
     if not indices:
         indices = [0]
 
-    # append end marker
     indices_sorted = sorted(indices)
     indices_sorted.append(len(vertices))
 
-    for idx_num in range(len(indices_sorted)-1):
-        start = indices_sorted[idx_num]
-        end = indices_sorted[idx_num+1]
-        contour_vertices = vertices[start:end]
-        file_name = f"{base}_level_{level}.txt"
-        file_path = os.path.join(folder_name, file_name)
+    file_name = f"level_{level}.txt"
+    file_path = os.path.join(folder_name, file_name)
 
-        with open(file_path, "w") as f:
+    with open(file_path, "w") as f:
+        segment_count = len(indices_sorted) - 1
+        for idx_num in range(segment_count):
+            start = indices_sorted[idx_num]
+            end = indices_sorted[idx_num+1]
+            contour_vertices = vertices[start:end]
+            
+            if idx_num > 0:
+                f.write("---\n")  # Segment separator
+            
             if formatted:
                 f.write(f"# Contour Level: {level}\n")
-                f.write(f"# Part: {idx_num+1}\n")
+                f.write(f"# Segment: {idx_num+1} of {segment_count}\n")
                 f.write(f"# Number of vertices: {len(contour_vertices) // 2}\n")
                 if wcs is not None:
                     f.write("# Columns: X_pixel, Y_pixel, RA, DEC\n\n")
@@ -456,8 +440,6 @@ def write_contour_text(folder_name: str, level: float, base: str, vertices: list
                     x, y = contour_vertices[i], contour_vertices[i + 1]
                     f.write(f"{x:.6f} {y:.6f}\n")
             f.write(f"\n")
-        # print(f"✅ Saved contour to: {file_name}")
-
 
 # -------------------------------
 # Visualisation
@@ -516,9 +498,6 @@ def main():
         print("WCS detected: using coordinate metadata for consistency.")
     elif metadata:
         print("Header metadata found, but WCS could not be constructed.")
-
-    # print(f"Applying smoothing: {smoothing_mode} ({smoothing_value})")
-    # smoothed = apply_smoothing(image, smoothing_mode, smoothing_value)
 
     base_name = os.path.splitext(os.path.basename(args.filename))[0]
     file_ext = os.path.splitext(args.filename)[1].lower().lstrip('.')

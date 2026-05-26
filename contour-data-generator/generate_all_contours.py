@@ -66,7 +66,6 @@ def generate_contours(
         print(f"❌ Error: {e}")
         return False
 
-
 def main():
     """Generate all contour combinations."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -98,20 +97,10 @@ def main():
         ("500x500.fits", "gaussian", 1.5),
         ("500x500.fits", "block", 4.0),
         
-        # 500x500.hdf5 - no smoothing, gaussian, block
-        # ("500x500.hdf5", "none", 0.0),
-        # ("500x500.hdf5", "gaussian", 1.5),
-        # ("500x500.hdf5", "block", 4.0),
-        
         # 500x500_nans.fits - no smoothing, gaussian, block
         ("500x500_nans.fits", "none", 0.0),
         ("500x500_nans.fits", "gaussian", 1.5),
         ("500x500_nans.fits", "block", 4.0),
-        
-        # 500x500_nans.hdf5 - no smoothing, gaussian, block
-        # ("500x500_nans.hdf5", "none", 0.0),
-        # ("500x500_nans.hdf5", "gaussian", 1.5),
-        # ("500x500_nans.hdf5", "block", 4.0),
     ]
     
     total = len(tasks)
