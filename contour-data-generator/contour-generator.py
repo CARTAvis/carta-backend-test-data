@@ -206,8 +206,8 @@ def trace_segment(image, visited, width, height, scale, offset, level, x_cell, y
                 (i < 0 or i >= width - 1 or j < 0 or j >= height - 1):
                 done = True
 
-        x_val = x
-        y_val = y
+        x_val = x - 0.5
+        y_val = y - 0.5
         vertices.append(scale * x_val + offset)
         vertices.append(scale * y_val + offset)
 
