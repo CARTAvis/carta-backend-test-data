@@ -206,9 +206,8 @@ def trace_segment(image, visited, width, height, scale, offset, level, x_cell, y
                 (i < 0 or i >= width - 1 or j < 0 or j >= height - 1):
                 done = True
 
-        # Shift to pixel center
-        x_val = x + 0.5
-        y_val = y + 0.5
+        x_val = x
+        y_val = y
         vertices.append(scale * x_val + offset)
         vertices.append(scale * y_val + offset)
 
@@ -310,7 +309,7 @@ def write_contour_binary(folder_name: str, level: float, base: str, vertices: li
     indices_sorted = sorted(indices)
     indices_sorted.append(len(vertices))
 
-    file_name = f"{level}.bin"
+    file_name = f"level_{str(int(level))}.bin"
     file_path = os.path.join(folder_name, file_name)
     
     with open(file_path, 'wb') as f:
@@ -384,7 +383,7 @@ def write_contour_text(folder_name: str, level: float, base: str, vertices: list
     indices_sorted = sorted(indices)
     indices_sorted.append(len(vertices))
 
-    file_name = f"level_{level}.txt"
+    file_name = f"level_{str(int(level))}.txt"
     file_path = os.path.join(folder_name, file_name)
 
     with open(file_path, "w") as f:
