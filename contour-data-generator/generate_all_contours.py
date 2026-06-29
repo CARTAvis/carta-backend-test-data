@@ -57,7 +57,7 @@ def generate_contours(
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         if result.returncode != 0:
-            print(f"   Error: {result.stderr[:200]}")
+            print(f"   Error: {result}")
         return result.returncode == 0
     except subprocess.TimeoutExpired:
         print(f"❌ Timeout")

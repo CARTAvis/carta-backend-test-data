@@ -47,11 +47,11 @@ python contour-generator.py <filename> [options]
 | Option                         | Description                                                              | Default  |
 | ------------------------------ | ------------------------------------------------------------------------ | -------- |
 | `--levels L1 L2 ...`           | Contour levels to generate. Can be negative, zero, or positive.          | `-1 0 1` |
-| `--smoothing none`             | No smoothing applied (currently not functional).                         | `none`   |
-| `--smoothing gaussian <sigma>` | Gaussian blur mode (defined but not currently applied).                  | `none`   |
-| `--smoothing block <factor>`   | Block averaging mode (defined but not currently applied).                | `none`   |
+| `--smoothing none`             | No smoothing applied.                                                     | `none`   |
+| `--smoothing gaussian <sigma>` | Gaussian blur mode using the requested sigma.                            | `none`   |
+| `--smoothing block <factor>`   | Block averaging mode using the requested block factor.                   | `none`   |
 | `--formatted`                  | Save output in a human-readable format with header and labeled vertices. | False    |
-| `--show`                       | Save JPG images with colored contour lines overlayed on the original image. | False    |
+| `--show`                       | Save JPG images with colored contour lines overlayed on the selected image. | False    |
 | `--format {text,binary,both}`  | Output format: `text` (default), `binary` (compact .bin), or `both`.     | `text`   |
 | `--emit-world`                 | Include world coordinates (WCS) in formatted output when available.       | False    |
 
@@ -184,8 +184,9 @@ See `BINARY_FORMAT_MIGRATION.md` for detailed migration guidance.
 - `.hdf5`, `.h5` (HDF5 files - automatically finds first available dataset)
 
 **Data handling:**
-- NaN values are replaced with 0 during image loading
+- NaN values are preserved during image loading and passed through contour extraction
 - Multi-dimensional data: if >2D, uses the first slice
 
-**Currently disabled features:**
-- Smoothing options (Gaussian and block averaging) are defined in the code but not applied in the contour generation pipeline. They remain available for future implementation.
+**Supported smoothing features:**
+- `--smoothing gaussian <sigma>` applies Gaussian blur before contour extraction
+- `--smoothing block <factor>` applies block averaging before contour extraction
