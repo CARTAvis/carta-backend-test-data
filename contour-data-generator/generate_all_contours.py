@@ -92,15 +92,17 @@ def main():
     
     # Define tasks: (image_filename, smoothing_mode, smoothing_factor)
     tasks: List[Tuple[str, str, float]] = [
+        ("10x10.fits", "none", 0.0),
+
         # 500x500.fits - no smoothing, gaussian, block
-        ("500x500.fits", "none", 0.0),
-        ("500x500.fits", "gaussian", 1.5),
-        ("500x500.fits", "block", 4.0),
+        # ("500x500.fits", "none", 0.0),
+        # ("500x500.fits", "gaussian", 1.5),
+        # ("500x500.fits", "block", 4.0),
         
         # 500x500_nans.fits - no smoothing, gaussian, block
-        ("500x500_nans.fits", "none", 0.0),
-        ("500x500_nans.fits", "gaussian", 1.5),
-        ("500x500_nans.fits", "block", 4.0),
+        # ("500x500_nans.fits", "none", 0.0),
+        # ("500x500_nans.fits", "gaussian", 1.5),
+        # ("500x500_nans.fits", "block", 4.0),
     ]
     
     total = len(tasks)

@@ -6,6 +6,7 @@ Outputs .txt or .bin file per contour level and optionally a JPG visualisation.
 
 import argparse
 import math
+import struct
 import numpy as np
 import h5py
 from astropy.io import fits
@@ -73,24 +74,32 @@ def find_first_dataset(group):
 
 def load_image(filename: str) -> tuple[np.ndarray, dict]:
     ext = os.path.splitext(filename)[1].lower()
-    metadata = {}
-
     if ext in [".fits", ".fit"]:
         with fits.open(filename) as hdul:
             data = hdul[0].data.astype(np.float32)
             metadata = extract_metadata_from_header(hdul[0].header)
-            x_offset = metadata.get('CRPIX1', 0)
-            y_offset = metadata.get('CRPIX2', 0)
+            header = hdul[0].header
+        
+            x_offset = header.get('CRPIX1', 0)
+            y_offset = header.get('CRPIX2', 0)
+            
             print(f"FITS Header - CRPIX1 (X): {x_offset}, CRPIX2 (Y): {y_offset}")
     elif ext in [".h5", ".hdf5"]:
         with h5py.File(filename, "r") as f:
-            dataset = find_first_dataset(f)
-            if dataset is None:
+            # Try to find the first dataset in the file
+            def first_dataset(g):
+                for key in g.keys():
+                    if isinstance(g[key], h5py.Dataset):
+                        return g[key][()]
+                    elif isinstance(g[key], h5py.Group):
+                        result = first_dataset(g[key])
+                        if result is not None:
+                            return result
+                return None
+            data = first_dataset(f)
+            if data is None:
                 raise ValueError("No dataset found in HDF5 file.")
-            data = np.array(dataset[()], dtype=np.float32)
-            metadata = extract_metadata_from_hdf5(f)
-            if metadata:
-                print(f"HDF5 metadata keys: {', '.join(sorted(metadata.keys()))}")
+            data = np.array(data, dtype=np.float32)
     else:
         raise ValueError(f"Unsupported file format: {ext}")
 
@@ -98,7 +107,7 @@ def load_image(filename: str) -> tuple[np.ndarray, dict]:
     if data.ndim > 2:
         data = data[0]
 
-    return np.nan_to_num(data), metadata
+    return data, metadata
 
 
 def metadata_to_wcs(metadata):
@@ -117,27 +126,114 @@ def metadata_to_wcs(metadata):
 # -------------------------------
 # Smoothing
 # -------------------------------
+
 def apply_smoothing(image: np.ndarray, mode: str, factor: float) -> np.ndarray:
     if mode == "none":
         return image
     elif mode == "gaussian":
-        return gaussian_filter(image, sigma=factor)
+        # Replicating carta::GaussianSmooth and separable 1D RunKernel
+        src_height, src_width = image.shape
+        smoothing_factor = int(factor)
+        apron_height = smoothing_factor - 1
+        dest_width = src_width - 2 * apron_height
+        dest_height = src_height - 2 * apron_height
+        
+        if dest_width <= 0 or dest_height <= 0:
+            return np.array([[]], dtype=np.float32)
+
+        sigma = (smoothing_factor - 1) / 2.0
+        mask_size = (smoothing_factor - 1) * 2 + 1
+        kernel_radius = apron_height
+        
+        # MakeKernel (NormPdf)
+        kernel = np.zeros(mask_size, dtype=np.float32)
+        for j in range(kernel_radius + 1):
+            val = math.exp(-0.5 * (j * j) / (sigma * sigma)) / sigma
+            kernel[kernel_radius + j] = val
+            kernel[kernel_radius - j] = val
+
+        # Horizontal 1D pass
+        temp_buffer = np.zeros((src_height, dest_width), dtype=np.float32)
+        for y in range(src_height):
+            for x in range(dest_width):
+                src_x = x + kernel_radius
+                s_sum = 0.0
+                w_sum = 0.0
+                for i in range(-kernel_radius, kernel_radius + 1):
+                    val = image[y, src_x + i]
+                    if not math.isnan(val) and not math.isinf(val):
+                        w = kernel[i + kernel_radius]
+                        s_sum += val * w
+                        w_sum += w
+                temp_buffer[y, x] = s_sum / w_sum if w_sum > 0.0 else float('nan')
+
+        # Vertical 1D pass + NaN re-injection
+        dest_data = np.zeros((dest_height, dest_width), dtype=np.float32)
+        for y in range(dest_height):
+            src_y = y + kernel_radius
+            for x in range(dest_width):
+                orig_val = image[src_y, x + kernel_radius]
+                if math.isnan(orig_val) or math.isinf(orig_val):
+                    dest_data[y, x] = float('nan')
+                    continue
+                
+                s_sum = 0.0
+                w_sum = 0.0
+                for i in range(-kernel_radius, kernel_radius + 1):
+                    val = temp_buffer[src_y + i, x]
+                    if not math.isnan(val) and not math.isinf(val):
+                        w = kernel[i + kernel_radius]
+                        s_sum += val * w
+                        w_sum += w
+                dest_data[y, x] = s_sum / w_sum if w_sum > 0.0 else float('nan')
+
+        return dest_data
+
     elif mode == "block":
-        return block_reduce(image, block_size=(int(factor), int(factor)), func=np.mean)
+        # Replicating carta::BlockSmoothScalar
+        src_height, src_width = image.shape
+        factor_int = int(factor)
+        dest_width = math.ceil(src_width / factor_int)
+        dest_height = math.ceil(src_height / factor_int)
+        
+        dest_data = np.zeros((dest_height, dest_width), dtype=np.float32)
+        for j in range(dest_height):
+            for i in range(dest_width):
+                image_row = j * factor_int
+                image_col = i * factor_int
+                rows_left = min(factor_int, src_height - image_row)
+                cols_left = min(factor_int, src_width - image_col)
+                
+                pixel_sum = 0.0
+                pixel_count = 0
+                for py in range(rows_left):
+                    for px in range(cols_left):
+                        pix_val = image[image_row + py, image_col + px]
+                        if not math.isnan(pix_val) and not math.isinf(pix_val):
+                            pixel_count += 1
+                            pixel_sum += pix_val
+                            
+                dest_data[j, i] = pixel_sum / pixel_count if pixel_count > 0 else float('nan')
+        return dest_data
     else:
         raise ValueError(f"Unknown smoothing mode: {mode}")
-
 
 # -------------------------------
 # Contour Extraction
 # -------------------------------
+
+def is_below(val, level):
+    return not math.isnan(val) and val < level
+
+def is_ge(val, level):
+    return not math.isnan(val) and val >= level
 
 def trace_segment(image, visited, width, height, scale, offset, level, x_cell, y_cell, side, vertices):
     i = x_cell
     j = y_cell
     orig_side = side
     first_iteration = True
-    done = (i < 0 or i >= width - 1 or j < 0 or j >= height - 1)
+    done = (i < 0 or i >= width - 1 or (j < 0 and j >= height - 1))
 
     while not done:
         flag = False
@@ -146,11 +242,11 @@ def trace_segment(image, visited, width, height, scale, offset, level, x_cell, y
         c = image[(j + 1) * width + i + 1]
         d = image[(j + 1) * width + i]
 
-        # Replace NaNs with negative infinity
-        a = a if not math.isnan(a) else -float('inf')
-        b = b if not math.isnan(b) else -float('inf')
-        c = c if not math.isnan(c) else -float('inf')
-        d = d if not math.isnan(d) else -float('inf')
+        max_float = 3.4028234663852886e+38 # C++ float max limit
+        a = -max_float if math.isnan(a) else a
+        b = -max_float if math.isnan(b) else b
+        c = -max_float if math.isnan(c) else c
+        d = -max_float if math.isnan(d) else d
 
         x = y = 0.0
 
@@ -190,7 +286,7 @@ def trace_segment(image, visited, width, height, scale, offset, level, x_cell, y
                 elif side == 2:  # BottomEdge
                     if c >= level and level > d:
                         flag = True
-                        x = (level - d) / (c - d) + i
+                        x = (level - d) / (d - c) + i
                         y = j + 1
                         j += 1
                 elif side == 3:  # LeftEdge
@@ -206,6 +302,7 @@ def trace_segment(image, visited, width, height, scale, offset, level, x_cell, y
                 (i < 0 or i >= width - 1 or j < 0 or j >= height - 1):
                 done = True
 
+        # Shift to pixel center
         x_val = x + 0.5
         y_val = y + 0.5
         vertices.append(scale * x_val + offset)
@@ -225,7 +322,7 @@ def trace_level(image, width, height, scale, offset, level):
             pt_a = image[j * width + i]
             pt_b = image[j * width + i + 1]
 
-            if (math.isnan(pt_a) or pt_a < level) and level <= pt_b:
+            if is_below(pt_a, level) and is_ge(pt_b, level):
                 indices.append(len(vertices))
                 trace_segment(image, visited, width, height, scale, offset, level, i, j, 0, vertices)
             checked_pixels += 1
@@ -236,7 +333,7 @@ def trace_level(image, width, height, scale, offset, level):
         pt_a = image[j * width + i]
         pt_b = image[(j + 1) * width + i]
 
-        if (math.isnan(pt_a) or pt_a < level) and level <= pt_b:
+        if is_below(pt_a, level) and is_ge(pt_b, level):
             indices.append(len(vertices))
             trace_segment(image, visited, width, height, scale, offset, level, i - 1, j, 1, vertices)
         checked_pixels += 1
@@ -247,7 +344,7 @@ def trace_level(image, width, height, scale, offset, level):
         pt_a = image[j * width + i + 1]
         pt_b = image[j * width + i]
 
-        if (math.isnan(pt_a) or pt_a < level) and level <= pt_b:
+        if is_below(pt_a, level) and is_ge(pt_b, level):
             indices.append(len(vertices))
             trace_segment(image, visited, width, height, scale, offset, level, i, j - 1, 2, vertices)
         checked_pixels += 1
@@ -258,7 +355,7 @@ def trace_level(image, width, height, scale, offset, level):
         pt_a = image[(j + 1) * width + i]
         pt_b = image[j * width + i]
 
-        if (math.isnan(pt_a) or pt_a < level) and level <= pt_b:
+        if is_below(pt_a, level) and is_ge(pt_b, level):
             indices.append(len(vertices))
             trace_segment(image, visited, width, height, scale, offset, level, i, j, 3, vertices)
         checked_pixels += 1
@@ -276,84 +373,92 @@ def trace_level(image, width, height, scale, offset, level):
 
     return vertices, indices
 
-def generate_contours(image: np.ndarray, smoothing_mode: str, level: float):
-    vertex_map = []
-    index_map = []
-
-    # contour level
+def generate_contours(image: np.ndarray, smoothing_mode: str, smoothing_factor: float, level: float):
+    scale = smoothing_factor if smoothing_mode == "block" else 1.0
+    
     vertex_map, index_map = trace_level(
         image.flatten(),
         image.shape[1],
         image.shape[0],
-        scale=1.0,
+        scale=scale,
         offset=0.0,
         level=level
     )
+    if len(vertex_map) == 0:
+        arr = np.array([], dtype=np.float32)
+    else:
+        arr = np.array(vertex_map, dtype=np.float32).reshape(-1, 2)
 
-    return vertex_map, index_map
+    return arr, index_map
 
 
 # -------------------------------
 # Output Writing
 # -------------------------------
-def write_contour_binary(folder_name: str, level: float, base: str, vertices: list, indices: list):
+def _get_binary_dtype(precision: int):
+    if precision == 64:
+        return np.dtype(np.float64)
+    if precision == 32:
+        return np.dtype(np.float32)
+    if precision == 16:
+        return np.dtype(np.float16)
+    if precision == 8:
+        return np.dtype(np.uint8)
+    raise ValueError(f"Unsupported precision {precision}; expected one of: 8, 16, 32, 64")
+
+
+def write_contour_binary(folder_name: str, level: float, base: str, vertices: list, precision: int):
     if not os.path.isdir(folder_name):
         os.mkdir(folder_name)
-        print(f"Folder '{folder_name}' created successfully.")
-    
-    # If no indices, treat entire list as a single contour
-    if not indices:
-        indices = [0]
-
-    # append end marker
-    indices_sorted = sorted(indices)
-    indices_sorted.append(len(vertices))
 
     file_name = f"level_{str(int(level))}.bin"
     file_path = os.path.join(folder_name, file_name)
-    
+
+    dtype = _get_binary_dtype(precision)
+    data_to_save = np.array(vertices, dtype=dtype)
+    count = data_to_save.size
+
     with open(file_path, 'wb') as f:
-        segment_count = len(indices_sorted) - 1
-        for idx_num in range(segment_count):
-            start = indices_sorted[idx_num]
-            end = indices_sorted[idx_num+1]
-            contour_vertices = vertices[start:end]
-            
-            # Convert to numpy array and cast to float32 (little-endian)
-            data_to_save = np.array(contour_vertices, dtype=np.float32)
-            
-            # Write header for this segment
-            f.write(b'CTRN')  # Magic number (4 bytes)
-            f.write(np.uint32(1).tobytes())  # Version 1 (4 bytes, little-endian)
-            f.write(np.uint32(len(contour_vertices) // 2).tobytes())  # Num coordinate pairs (4 bytes)
-            f.write(b'\x00\x00\x00\x00')  # Reserved (4 bytes)
-            
-            # Write coordinate data (float32, little-endian)
-            f.write(data_to_save.astype(np.float32).tobytes())
+        f.write(struct.pack('<Q', count))         # number of floats
+        # f.write(struct.pack('<I', precision))     # saved precision value
+        f.write(data_to_save.tobytes())
 
 
 def read_contour_binary(file_path: str) -> np.ndarray:
     with open(file_path, 'rb') as f:
-        # Read and validate header
-        magic = f.read(4)
-        if magic != b'CTRN':
-            raise ValueError(f"Invalid binary file: magic number mismatch (expected 'CTRN', got {magic})")
-        
-        version = np.frombuffer(f.read(4), dtype=np.uint32, count=1)[0]
-        if version != 1:
-            raise ValueError(f"Unsupported binary format version: {version}")
-        
-        num_coords = np.frombuffer(f.read(4), dtype=np.uint32, count=1)[0]
-        reserved = f.read(4)  # Skip reserved bytes
-        
-        # Read coordinate data
-        data = np.frombuffer(f.read(), dtype=np.float32)
-        
-        if len(data) != num_coords * 2:
-            raise ValueError(f"Data size mismatch: expected {num_coords * 2} floats, got {len(data)}")
-    
-    # Reshape to coordinate pairs (N, 2) if needed
+        count_data = f.read(8)
+        if len(count_data) < 8:
+            raise ValueError("Binary file is too small to contain a vertex count")
+
+        count = struct.unpack('<Q', count_data)[0]
+
+        data = np.frombuffer(f.read(), dtype=_get_binary_dtype(32))
+
+        if len(data) != count:
+            raise ValueError(f"Data size mismatch: expected {count} floats, got {len(data)}")
+
     return data.reshape(-1, 2) if len(data) > 0 else data
+
+# def read_contour_binary(file_path: str) -> np.ndarray:
+#     with open(file_path, 'rb') as f:
+#         count_data = f.read(8)
+#         if len(count_data) < 8:
+#             raise ValueError("Binary file is too small to contain a vertex count")
+
+#         count = struct.unpack('<Q', count_data)[0]
+
+#         precision_data = f.read(4)
+#         if len(precision_data) < 4:
+#             raise ValueError("Binary file is too small to contain a precision value")
+
+#         precision = struct.unpack('<I', precision_data)[0]
+#         dtype = _get_binary_dtype(precision)
+#         data = np.frombuffer(f.read(), dtype=dtype)
+
+#         if len(data) != count:
+#             raise ValueError(f"Data size mismatch: expected {count} floats, got {len(data)}")
+
+#     return data.reshape(-1, 2) if len(data) > 0 else data
 
 
 def write_contour_files(level: float, base: str, vertices: list, indices: list, formatted: bool, wcs=None, output_format: str = "text"):
@@ -363,10 +468,10 @@ def write_contour_files(level: float, base: str, vertices: list, indices: list, 
     print(f"DEBUG: Level {level} | Total vertices in list: {len(vertices)}")
     
     if output_format == "binary":
-        write_contour_binary(folder_name, level, os.path.basename(base), vertices, indices)
+        write_contour_binary(folder_name, level, os.path.basename(base), vertices, 32)
     elif output_format == "both":
-        write_contour_binary(folder_name, level, os.path.basename(base), vertices, indices)
-        write_contour_text(folder_name, level, base, vertices, indices, formatted, wcs)
+        write_contour_binary(folder_name, level, os.path.basename(base), vertices, 32)
+        write_contour_text(folder_name, level, os.path.basename(base), vertices)
     else:  # text or default
         write_contour_text(folder_name, level, base, vertices, indices, formatted, wcs)
 
@@ -391,7 +496,7 @@ def write_contour_text(folder_name: str, level: float, base: str, vertices: list
         for idx_num in range(segment_count):
             start = indices_sorted[idx_num]
             end = indices_sorted[idx_num+1]
-            contour_vertices = vertices[start:end]
+            contour_vertices = np.array(vertices[start:end], dtype=np.float32).reshape(-1, 2)
             
             if idx_num > 0:
                 f.write("---\n")  # Segment separator
@@ -399,12 +504,11 @@ def write_contour_text(folder_name: str, level: float, base: str, vertices: list
             if formatted:
                 f.write(f"# Contour Level: {level}\n")
                 f.write(f"# Segment: {idx_num+1} of {segment_count}\n")
-                f.write(f"# Number of vertices: {len(contour_vertices) // 2}\n")
+                f.write(f"# Number of vertices: {len(contour_vertices)}\n")
                 if wcs is not None:
                     f.write("# Columns: X_pixel, Y_pixel, RA, DEC\n\n")
-                    coords = np.array(contour_vertices).reshape(-1, 2)
-                    xs = coords[:, 0]
-                    ys = coords[:, 1]
+                    xs = contour_vertices[:, 0]
+                    ys = contour_vertices[:, 1]
                     try:
                         world = wcs.all_pix2world(xs, ys, 0)
                         # world may be (N,2) or tuple; normalize
@@ -421,24 +525,19 @@ def write_contour_text(folder_name: str, level: float, base: str, vertices: list
                         lon = [None] * len(xs)
                         lat = [None] * len(xs)
 
-                    for i in range(len(xs)):
-                        x, y = xs[i], ys[i]
-                        ra = lon[i]
-                        dec = lat[i]
+                    for x, y, ra, dec in zip(xs, ys, lon, lat):
                         if ra is None or dec is None:
                             f.write(f"{x:.6f}, {y:.6f}\n")
                         else:
                             f.write(f"{x:.6f}, {y:.6f}, {ra:.6f}, {dec:.6f}\n")
                 else:
                     f.write("# X, Y coordinates\n\n")
-                    for i in range(0, len(contour_vertices), 2):
-                        x, y = contour_vertices[i], contour_vertices[i + 1]
+                    for x, y in contour_vertices:
                         f.write(f"{x:.6f}, {y:.6f}\n")
             else:
-                for i in range(0, len(contour_vertices), 2):
-                    x, y = contour_vertices[i], contour_vertices[i + 1]
+                for x, y in contour_vertices:
                     f.write(f"{x:.6f} {y:.6f}\n")
-            f.write(f"\n")
+            f.write("\n")
 
 # -------------------------------
 # Visualisation
@@ -474,6 +573,8 @@ def main():
     parser.add_argument("filename", help="Input image file (.fits or .h5)")
     parser.add_argument("--levels", nargs="+", type=float, default=[-1, 0, 1],
                         help="Contour levels (default: -1 0 1)")
+    parser.add_argument("--percision", default=32,
+                            help="percision: <percision> (default: 32)")
     parser.add_argument("--smoothing", nargs="+", default=["none"],
                         help="Smoothing mode: none | gaussian <sigma> | block <factor>")
     parser.add_argument("--formatted", action="store_true", help="Save human-readable contour files.")
@@ -515,9 +616,13 @@ def main():
 
     for level in args.levels:
         print(f"Generating contours for levels: {level}")
-        vertices, indices = generate_contours(image, smoothing_mode, level)
+        vertices, indices = generate_contours(image, smoothing_mode, smoothing_value, level)
 
-        write_contour_files(level, output_dir, vertices, indices, args.formatted, wcs if args.emit_world else None, args.format)
+        # write_contour_files(level, output_dir, vertices, indices, args.formatted, wcs if args.emit_world else None, args.format)
+
+        write_contour_binary(output_dir, level, os.path.basename(output_dir), vertices, args.percision)
+
+        write_contour_text(output_dir, level, os.path.basename(output_dir), vertices, indices, True, wcs if args.emit_world else None)
 
     for level in args.levels:
         # write_contour_files(level, base, vertices, indices, args.formatted)
