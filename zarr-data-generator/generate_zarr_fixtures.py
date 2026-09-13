@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -162,8 +163,22 @@ def create_numeric_array(
     return array
 
 
-def generate_xradio_fixture() -> None:
-    path = OUTPUT_DIR / "xradio" / "minimal"
+def add_consolidated_metadata(path: Path) -> None:
+    root_metadata_path = path / "zarr.json"
+    root_metadata = json.loads(root_metadata_path.read_text())
+    metadata = {
+        node.parent.relative_to(path).as_posix(): json.loads(node.read_text())
+        for node in sorted(path.rglob("zarr.json"))
+        if node != root_metadata_path
+    }
+    root_metadata["consolidated_metadata"] = {"kind": "inline", "metadata": metadata}
+    root_metadata_path.write_text(json.dumps(root_metadata, indent=2) + "\n")
+
+
+
+def generate_xradio_fixture(
+    path: Path, *, typed: bool, consolidated: bool, uniform_beams: bool = False
+) -> None:
     root = zarr.open_group(store=path, mode="w", zarr_format=3)
     root.attrs.update(
         {
@@ -174,10 +189,21 @@ def generate_xradio_fixture() -> None:
                     "attrs": {"frame": "fk5", "equinox": "J2000"},
                 },
                 "native_pole_direction": {"data": [0.0, 1.5707963267948966]},
+                "projection_parameters": [0.25, -0.5],
                 "pixel_coordinate_transformation_matrix": [[1.0, 0.0], [0.0, 1.0]],
             }
         }
     )
+    if typed:
+        root.attrs.update(
+            {
+                "type": "image_dataset",
+                "data_groups": {
+                    "base": {"sky": "SKY", "model": "MODEL", "residual": "RESIDUAL"},
+                    "deconvolution": {"sky": "SKY", "mask_deconvolve": "MASK_DECONVOLVE"},
+                },
+            }
+        )
 
     sky_shape = (1, 3, 2, 4, 5)
     create_numeric_array(
@@ -187,7 +213,8 @@ def generate_xradio_fixture() -> None:
         chunks=(1, 1, 1, 2, 5),
         attributes={
             "units": "Jy/beam",
-            "type": "Intensity",
+            "type": "sky",
+            "flag": "MASK_0",
             "object_name": "Zarr test source",
             "observer": "CARTA",
             "obsdate": {"data": 59000.0, "attrs": {"format": "MJD", "scale": "UTC"}},
@@ -212,12 +239,18 @@ def generate_xradio_fixture() -> None:
     )
     create_numeric_array(
         path / "frequency",
-        np.asarray([1.4e9, 1.401e9, 1.402e9], dtype=np.float64),
+        np.asarray([1.4e9, 1.401e9, 1.403e9], dtype=np.float64),
         dimension_names=("frequency",),
         attributes={
-            "reference_frequency": {"attrs": {"units": "Hz", "observer": "lsrk"}},
+            "reference_frequency": {"data": 1.401e9, "attrs": {"units": "Hz", "observer": "lsrk"}},
             "rest_frequency": {"data": 1.420405751e9},
         },
+    )
+    create_numeric_array(
+        path / "time",
+        np.asarray([1.6e9], dtype=np.float64),
+        dimension_names=("time",),
+        attributes={"units": "s", "scale": "utc", "format": "unix"},
     )
     polarization = create_string_array(
         path / "polarization",
@@ -235,11 +268,21 @@ def generate_xradio_fixture() -> None:
     )
     parameter_labels.attrs.update({"dimension_names": ["beam_params_label"]})
 
+    # A table with one row per plane holding the same beam on every one of them is what a
+    # converter writes for an image that was restored with a single beam. It has to stay
+    # distinguishable from a table whose planes really differ, because a consumer that sees
+    # "multiple beams" reconciles them -- ImageMoments convolves the whole cube to a common
+    # beam first -- and doing that to planes that already agree costs a full copy of the cube
+    # for no change.
     beam_values = np.zeros((1, 3, 2, 3), dtype=np.float64)
     for channel in range(3):
         for stokes in range(2):
-            major = 2.0e-5 + (channel * 1.0e-6) + (stokes * 1.0e-7)
-            beam_values[0, channel, stokes] = (major / 2.0, 0.1 + channel * 0.01, major)
+            if uniform_beams:
+                major = 2.0e-5
+                beam_values[0, channel, stokes] = (major / 2.0, 0.1, major)
+            else:
+                major = 2.0e-5 + (channel * 1.0e-6) + (stokes * 1.0e-7)
+                beam_values[0, channel, stokes] = (major / 2.0, 0.1 + channel * 0.01, major)
     create_numeric_array(
         path / "BEAM",
         beam_values,
@@ -247,6 +290,73 @@ def generate_xradio_fixture() -> None:
         chunks=(1, 1, 1, 3),
         attributes={"units": "rad"},
     )
+
+    create_numeric_array(
+        path / "MODEL",
+        np.ones(sky_shape, dtype=np.float32),
+        dimension_names=("time", "frequency", "polarization", "l", "m"),
+        chunks=(1, 1, 1, 2, 5),
+        attributes={"units": "Jy/beam", "type": "model"},
+    )
+    create_numeric_array(
+        path / "RESIDUAL",
+        np.full(sky_shape, 2.0, dtype=np.float32),
+        dimension_names=("time", "frequency", "polarization", "l", "m"),
+        chunks=(1, 1, 1, 2, 5),
+        attributes={"units": "Jy/beam", "type": "residual"},
+    )
+    create_numeric_array(
+        path / "MASK_DECONVOLVE",
+        np.ones(sky_shape, dtype=np.float32),
+        dimension_names=("time", "frequency", "polarization", "l", "m"),
+        chunks=(1, 1, 1, 2, 5),
+        attributes={"units": "", "type": "mask_deconvolve"},
+    )
+    create_numeric_array(
+        path / "MASK_0",
+        np.ones(sky_shape, dtype=bool),
+        dimension_names=("time", "frequency", "polarization", "l", "m"),
+        chunks=(1, 1, 1, 2, 5),
+        attributes={"type": "flag"},
+    )
+    create_numeric_array(
+        path / "APERTURE",
+        np.zeros(sky_shape, dtype=np.float32),
+        dimension_names=("time", "frequency", "polarization", "u", "v"),
+        chunks=(1, 1, 1, 2, 5),
+        attributes={"type": "aperture"},
+    )
+    create_numeric_array(
+        path / "COMPLEX",
+        np.zeros(sky_shape, dtype=np.complex64),
+        dimension_names=("time", "frequency", "polarization", "l", "m"),
+        chunks=(1, 1, 1, 2, 5),
+        attributes={"type": "sky"},
+    )
+
+    # XRADIO writes these optional coordinates by default (do_sky_coords=True). They share SKY's
+    # spatial axes, are real-valued, and carry no type attribute, so they are the exact shape that a
+    # discovery rule keyed only on "has l and m" would mistake for openable images.
+    lm_shape = (sky_shape[3], sky_shape[4])
+    create_numeric_array(
+        path / "right_ascension",
+        np.zeros(lm_shape, dtype=np.float64),
+        dimension_names=("l", "m"),
+    )
+    create_numeric_array(
+        path / "declination",
+        np.zeros(lm_shape, dtype=np.float64),
+        dimension_names=("l", "m"),
+    )
+    create_numeric_array(
+        path / "velocity",
+        np.asarray([100.0, 200.0, 300.0], dtype=np.float64),
+        dimension_names=("frequency",),
+        attributes={"type": "doppler", "units": "m/s"},
+    )
+
+    if consolidated:
+        add_consolidated_metadata(path)
 
 
 def generate_pixel_fixture(path: Path, *, l_fastest: bool = False) -> None:
@@ -386,11 +496,14 @@ def generate_pixel_fixture(path: Path, *, l_fastest: bool = False) -> None:
 def main() -> None:
     # Remove only what this script owns, so that a fixture placed here by something else -- or by a
     # later version of this script -- is not deleted by a run that cannot rebuild it.
-    for owned in ("string", "xradio/minimal", "pixels"):
+    for owned in ("string", "xradio/minimal", "xradio/uniform_beam", "pixels"):
         shutil.rmtree(OUTPUT_DIR / owned, ignore_errors=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     generate_string_fixtures()
-    generate_xradio_fixture()
+    generate_xradio_fixture(OUTPUT_DIR / "xradio" / "minimal", typed=True, consolidated=True)
+    generate_xradio_fixture(
+        OUTPUT_DIR / "xradio" / "uniform_beam", typed=True, consolidated=True, uniform_beams=True
+    )
     generate_pixel_fixture(OUTPUT_DIR / "pixels")
 
 
