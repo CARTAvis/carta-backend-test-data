@@ -175,10 +175,16 @@ def add_consolidated_metadata(path: Path) -> None:
     root_metadata_path.write_text(json.dumps(root_metadata, indent=2) + "\n")
 
 
-
 def generate_xradio_fixture(
-    path: Path, *, typed: bool, consolidated: bool, uniform_beams: bool = False
+    path: Path, *, typed: bool, consolidated: bool, uniform_beams: bool = False, times: int = 1
 ) -> None:
+    """The multi-image XRADIO reference dataset.
+
+    `times` is the length of the dataset's time coordinate, and so of every image in it: the
+    coordinate is the dataset's, and an image's extent along an axis must be its coordinate's. More
+    than one is a valid dataset that CARTA does not display, which is what the backend has to list
+    without offering an image it would then refuse to open.
+    """
     root = zarr.open_group(store=path, mode="w", zarr_format=3)
     root.attrs.update(
         {
@@ -205,7 +211,7 @@ def generate_xradio_fixture(
             }
         )
 
-    sky_shape = (1, 3, 2, 4, 5)
+    sky_shape = (times, 3, 2, 4, 5)
     create_numeric_array(
         path / "SKY",
         np.zeros(sky_shape, dtype=np.float32),
@@ -248,7 +254,7 @@ def generate_xradio_fixture(
     )
     create_numeric_array(
         path / "time",
-        np.asarray([1.6e9], dtype=np.float64),
+        np.asarray([1.6e9 + (60.0 * index) for index in range(times)], dtype=np.float64),
         dimension_names=("time",),
         attributes={"units": "s", "scale": "utc", "format": "unix"},
     )
@@ -274,15 +280,15 @@ def generate_xradio_fixture(
     # "multiple beams" reconciles them -- ImageMoments convolves the whole cube to a common
     # beam first -- and doing that to planes that already agree costs a full copy of the cube
     # for no change.
-    beam_values = np.zeros((1, 3, 2, 3), dtype=np.float64)
+    beam_values = np.zeros((times, 3, 2, 3), dtype=np.float64)
     for channel in range(3):
         for stokes in range(2):
             if uniform_beams:
                 major = 2.0e-5
-                beam_values[0, channel, stokes] = (major / 2.0, 0.1, major)
+                beam_values[:, channel, stokes] = (major / 2.0, 0.1, major)
             else:
                 major = 2.0e-5 + (channel * 1.0e-6) + (stokes * 1.0e-7)
-                beam_values[0, channel, stokes] = (major / 2.0, 0.1 + channel * 0.01, major)
+                beam_values[:, channel, stokes] = (major / 2.0, 0.1 + channel * 0.01, major)
     create_numeric_array(
         path / "BEAM",
         beam_values,
@@ -493,10 +499,119 @@ def generate_pixel_fixture(path: Path, *, l_fastest: bool = False) -> None:
     polarization.attrs.update({"dimension_names": ["polarization"]})
 
 
+def generate_wide_pixel_fixture(path: Path) -> None:
+    """A pixel fixture large enough for the reductions to split the work.
+
+    The other pixel fixtures are a few dozen pixels, which is the right size for pinning what a read
+    returns but is below every threshold the parallel paths have: a plane must hold more than 65,536
+    pixels before a histogram divides it between workers, and a chunk must before a spectral
+    reduction does. Everything those paths do -- the private accumulators, the merge, the split of a
+    read across threads -- went untested on the small fixtures and was checked against real cubes by
+    hand instead.
+
+    So this one is wide rather than interesting: no absent chunk and no flag array, because the fill
+    and mask paths are defined on the small fixtures and adding them here would only double what the
+    walk reads. What it does keep is the rule that no two axes are the same length, so a read that
+    permutes them cannot still produce the right shape.
+    """
+    time_size, frequency_size, polarization_size, l_size, m_size = 1, 4, 2, 512, 520
+    names = ("time", "frequency", "polarization", "l", "m")
+    shape = (time_size, frequency_size, polarization_size, l_size, m_size)
+    # Four chunks to a plane and two channels deep, so a read covers several of them and the walk
+    # has bands and slabs to divide rather than one chunk that is the whole image.
+    chunks = (1, 2, 1, 256, 260)
+
+    root = zarr.open_group(store=path, mode="w", zarr_format=3)
+    root.attrs.update(
+        {
+            "type": "image_dataset",
+            "data_groups": {"base": {"sky": "SKY"}},
+            "coordinate_system_info": {
+                "projection": "SIN",
+                "reference_direction": {
+                    "data": [1.0, 0.5],
+                    "attrs": {"frame": "fk5", "equinox": "J2000"},
+                },
+                "native_pole_direction": {"data": [0.0, 1.5707963267948966]},
+                "projection_parameters": [0.0, 0.0],
+                "pixel_coordinate_transformation_matrix": [[1.0, 0.0], [0.0, 1.0]],
+            },
+        }
+    )
+
+    # value = (f * P + p) * 1e6 + (l // 8) * 1000 + (m // 8), which still says where an element came
+    # from -- the quotient names the plane, the rest names the block of the plane -- but holds the
+    # same value across each eight-by-eight block. That is what makes the fixture compressible: a
+    # per-pixel ramp of float32 varies eighteen mantissa bits every element and zstd can do nothing
+    # with it, which cost six megabytes against under one for this.
+    #
+    # The largest value is 7,063,064, well inside the 16,777,216 a float32 counts to exactly, so a
+    # test recomputes it rather than approximating it.
+    indices = np.indices(shape)
+    plane_index = indices[1] * polarization_size + indices[2]
+    values = (plane_index * 1_000_000 + (indices[3] // 8) * 1000 + (indices[4] // 8)).astype(np.float32)
+
+    sky = zarr.create_array(
+        store=path / "SKY",
+        shape=shape,
+        chunks=chunks,
+        dtype=np.float32,
+        zarr_format=3,
+        dimension_names=names,
+        serializer=BytesCodec(endian="little"),
+        compressors=[ZstdCodec(level=9)],
+        fill_value=float("nan"),
+        attributes={
+            "units": "Jy/beam",
+            "type": "sky",
+            "object_name": "Zarr wide pixel source",
+            "observer": "CARTA",
+            "obsdate": {"data": 59000.0, "attrs": {"format": "MJD", "scale": "UTC"}},
+            "telescope": {
+                "name": "Test scope",
+                "direction": {"data": [2.0, -0.5], "attrs": {"units": "rad"}},
+                "distance": {"data": [6371000.0], "attrs": {"units": "m"}},
+            },
+        },
+    )
+    sky[:] = values
+
+    create_numeric_array(
+        path / "l",
+        (np.arange(l_size, dtype=np.float64) - (l_size // 2)) * 1e-5,
+        dimension_names=("l",),
+    )
+    create_numeric_array(
+        path / "m",
+        (np.arange(m_size, dtype=np.float64) - (m_size // 2)) * 1e-5,
+        dimension_names=("m",),
+    )
+    create_numeric_array(
+        path / "frequency",
+        1.4e9 + np.arange(frequency_size, dtype=np.float64) * 1e6,
+        dimension_names=("frequency",),
+        attributes={"rest_frequency": {"data": 1.420405751e9}},
+    )
+    create_numeric_array(
+        path / "time",
+        np.asarray([1.6e9], dtype=np.float64),
+        dimension_names=("time",),
+        attributes={"units": "s", "scale": "utc", "format": "unix"},
+    )
+    polarization = create_string_array(
+        path / "polarization",
+        serializer=BytesCodec(endian="little"),
+        shape=(polarization_size,),
+        chunks=(polarization_size,),
+        values=np.asarray(["I", "Q"], dtype="U1"),
+    )
+    polarization.attrs.update({"dimension_names": ["polarization"]})
+
+
 def main() -> None:
     # Remove only what this script owns, so that a fixture placed here by something else -- or by a
     # later version of this script -- is not deleted by a run that cannot rebuild it.
-    for owned in ("string", "xradio/minimal", "xradio/uniform_beam", "pixels"):
+    for owned in ("string", "xradio/minimal", "xradio/uniform_beam", "xradio/time_axis", "pixels"):
         shutil.rmtree(OUTPUT_DIR / owned, ignore_errors=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     generate_string_fixtures()
@@ -505,6 +620,7 @@ def main() -> None:
         OUTPUT_DIR / "xradio" / "uniform_beam", typed=True, consolidated=True, uniform_beams=True
     )
     generate_pixel_fixture(OUTPUT_DIR / "pixels")
+    generate_xradio_fixture(OUTPUT_DIR / "xradio" / "time_axis", typed=True, consolidated=True, times=2)
 
 
 if __name__ == "__main__":
