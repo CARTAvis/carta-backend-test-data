@@ -14,12 +14,12 @@ PYTHON_SCRIPT="get_contours.py"
 DATA_DIR="../images/fits"
 
 declare -a cases=(
-    # "$DATA_DIR/sensible-picture-noisey.fits 0 500 0 500 --smoothing none"
-    # "$DATA_DIR/sensible-picture-noisey.fits 0 500 0 500 --smoothing block"
-    # "$DATA_DIR/sensible-picture-noisey.fits 0 500 0 500 --smoothing gaussian"
-    "$DATA_DIR/sensible-picture-noisey-nans.fits 0 500 0 500 --smoothing none"
-    "$DATA_DIR/sensible-picture-noisey-nans.fits 0 500 0 500 --smoothing block"
-    "$DATA_DIR/sensible-picture-noisey-nans.fits 0 500 0 500 --smoothing gaussian"
+    "$DATA_DIR/sensible-picture-noisey.fits 0 50 100 150 200  --output-dir ../contours --smoothing NoSmoothing --smoothing-factor 4"
+    "$DATA_DIR/sensible-picture-noisey.fits 0 50 100 150 200  --output-dir ../contours --smoothing BlockAverage --smoothing-factor 4"
+    "$DATA_DIR/sensible-picture-noisey.fits 0 50 100 150 200  --output-dir ../contours --smoothing GaussianBlur --smoothing-factor 4"
+    "$DATA_DIR/sensible-picture-noisey-nans.fits 0 50 100 150 200  --output-dir ../contours --smoothing NoSmoothing --smoothing-factor 4"
+    "$DATA_DIR/sensible-picture-noisey-nans.fits 0 50 100 150 200  --output-dir ../contours --smoothing BlockAverage --smoothing-factor 4"
+    "$DATA_DIR/sensible-picture-noisey-nans.fits 0 50 100 150 200  --output-dir ../contours --smoothing GaussianBlur --smoothing-factor 4"
 )
 
 for case in "${cases[@]}"; do
