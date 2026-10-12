@@ -1,5 +1,7 @@
 # Tile Data Generator
 
+**Please note that this is currently not used**
+
 This Python script generates 2D tile data and writes it to a text file.  
 You can use it to create uniform grids (a single repeated value) or smooth gradients that progress horizontally, vertically, or diagonally across the grid.
 

@@ -42,24 +42,6 @@ def save_level(parent_folder: str, level_index: int, contour_set: ContourSet):
     os.makedirs(level_folder, exist_ok=True)
     print(f"Folder '{level_folder}' ready.")
 
-    # if not indices:
-    #     indices = [0, 0]
-    #     if indices[0] != 0:
-    #         raise ValueError(f"Invalid start index: {indices[0]}")
-
-    
-
-    # if len(coords) % 2:
-    #     raise ValueError(f"Odd vertex count for level: {level}")
-
-    # if any(idx < 0 or idx > len(coords) or idx % 2 for idx in indices):
-    #     raise ValueError(
-    #         f"Contour boundaries for level {level} must be even float offsets "
-    #         f"between 0 and {len(coords)}; got {indices}."
-    #     )
-    # if indices != sorted(indices):
-    #     raise ValueError(f"Contour boundaries for level {level} must be ordered; got {indices}.")
-
     num_points = contour_set.uncompressed_coordinates_size / 2
 
     meta_file_name = f"{level_index}_metadata.bin"
@@ -78,10 +60,7 @@ def save_level(parent_folder: str, level_index: int, contour_set: ContourSet):
         f_meta.write(struct.pack('<I', len(indices))) # number of indices
         f_meta.write(contour_set.raw_start_indices) # indices
 
-    # float_coords = array("f")
-    # float_coords.frombytes(contour_set.raw_coordinates)
     with open(verts_file_path, "wb") as f_verts:
-        # f_verts.write(float_coords.tobytes())
         f_verts.write(contour_set.raw_coordinates)
 
     print(f"Metadata saved to: {meta_file_path}")
@@ -153,7 +132,6 @@ try:
 
     base_name, _ = os.path.splitext(os.path.basename(args.image))
     base_name = base_name + "-" + SmoothingMode.Name(args.smoothing)
-    # output_dir = os.path.join(args.output_dir, base_name)
 
     for index, message in enumerate(contour_msgs):
         save_contours(base_name, args.output_dir, index, len(contour_msgs), message)

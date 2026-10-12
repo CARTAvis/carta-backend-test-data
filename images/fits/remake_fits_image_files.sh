@@ -3,7 +3,8 @@
 set -e
 
 # Path to the generator script
-GEN=./image-generator/make_image.py
+GEN=../image-generator/make_image.py
+OUTDIR=./
 
 # Hdf5ImageTest + FitsImageTest
 # BasicLoadingTest + ExampleFriendTest + CorrectShape2dImage
