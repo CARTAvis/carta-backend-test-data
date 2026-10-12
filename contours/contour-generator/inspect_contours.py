@@ -22,24 +22,8 @@ def read_top_metadata(folder):
     if len(data) < 4:
         raise ValueError(f"Top-level metadata is too short: {path}")
 
-    level_count = struct.unpack_from("<i", data)[0]
-    if level_count < 0:
-        raise ValueError(f"Invalid level count in {path}: {level_count}")
-
-    expected_size = 4 + (level_count * 8) + 8
-    if len(data) < expected_size:
-        raise ValueError(
-            f"Top-level metadata is truncated: expected at least {expected_size} bytes, got {len(data)}"
-        )
-
-    offset = 4
-    indices = list(struct.unpack_from(f"<{level_count}i", data, offset)) if level_count else []
-    offset += level_count * 4
-    levels = list(struct.unpack_from(f"<{level_count}i", data, offset)) if level_count else []
-    offset += level_count * 4
-    decimation_factor, uncompressed_size = struct.unpack_from("<ii", data, offset)
-
-    return path, indices, levels, decimation_factor, uncompressed_size
+    level_count = struct.unpack_from("<I", data)[0]
+    return path, level_count
 
 
 def read_level(folder, level_index):
@@ -49,17 +33,17 @@ def read_level(folder, level_index):
 
     with open(metadata_path, "rb") as file:
         metadata = file.read()
-    if len(metadata) < 8:
+    if len(metadata) < 12:
         raise ValueError(f"Level metadata is too short: {metadata_path}")
 
-    level, contour_count = struct.unpack_from("<iI", metadata)
-    expected_size = 8 + contour_count * 8
+    level, point_count, contour_count = struct.unpack_from("<fII", metadata)
+    expected_size = 12 + contour_count * 4
     if len(metadata) < expected_size:
         raise ValueError(
             f"Level metadata is truncated: expected {expected_size} bytes, got {len(metadata)}"
         )
 
-    end_indices = list(struct.unpack_from(f"<{contour_count}Q", metadata, 8)) if contour_count else []
+    end_indices = list(struct.unpack_from(f"<{contour_count}I", metadata, 12)) if contour_count else []
     with open(data_path, "rb") as file:
         vertex_data = file.read()
     if len(vertex_data) % 4 != 0:
@@ -67,7 +51,7 @@ def read_level(folder, level_index):
 
     float_count = len(vertex_data) // 4
     vertices = list(struct.unpack(f"<{float_count}f", vertex_data)) if float_count else []
-    return level, end_indices, vertices, metadata_path, data_path
+    return level, point_count, contour_count, end_indices, vertices, metadata_path, data_path
 
 
 def format_points(segment, max_points):
@@ -89,12 +73,9 @@ def inspect_folder(folder, max_points):
     print(f"Contour folder: {folder}")
     top_metadata = read_top_metadata(folder)
     if top_metadata:
-        path, indices, levels, decimation_factor, uncompressed_size = top_metadata
+        path, level_count = top_metadata
         print(f"Top metadata: {path}")
-        print(f"  level indices: {indices}")
-        print(f"  levels: {levels}")
-        print(f"  decimation factor: {decimation_factor}")
-        print(f"  uncompressed coordinates size: {uncompressed_size} bytes")
+        print(f"  level count: {level_count}")
     else:
         print("Top-level metadata file not found.")
 
@@ -108,8 +89,12 @@ def inspect_folder(folder, max_points):
         return
 
     for level_index in level_indices:
-        level, end_indices, vertices, metadata_path, data_path = read_level(folder, level_index)
+        level, point_count, contour_count, end_indices, vertices, metadata_path, data_path = read_level(
+            folder, level_index
+        )
         float_count = len(vertices)
+        if end_indices and end_indices[0] == 0:
+            end_indices = end_indices[1:]
         boundaries = [0, *end_indices]
         if boundaries[-1] != float_count:
             boundaries.append(float_count)
