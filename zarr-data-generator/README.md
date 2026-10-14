@@ -12,3 +12,10 @@ Run it directly from this directory:
 The string fixtures include valid codec layouts plus deliberately corrupted checksum, truncated-chunk, and invalid-Unicode
 variants. The XRADIO fixture exercises the metadata-to-FITS/casacore path and includes coordinate, Stokes, storage, and beam
 metadata. zarr-python currently emits its expected unstable-extension warning for fixed-length UTF-32 arrays.
+
+`../images/zarr/xradio/conformance_flagged` is not made here. It is copied unchanged from carta-zarr's
+`tests/data/images/zarr/xradio/conformance_flagged` (carta-zarr commit `eab337c`), which carta-zarr's
+`tests/data/generate_conformance_fixtures.py` converts with XRADIO 1.2.3 itself. Two CASA images, each
+with an internal mask over a few known pixels, are converted together as `SKY` and `SKY_OTHER`. The store
+holds the flags as XRADIO writes them: each flag an `int8` with `dtype: "bool"`, true where a pixel is bad,
+and tied to its image only by the root's `data_groups`.
