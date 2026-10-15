@@ -42,8 +42,8 @@
     }
   ],
   "attributes": {
-    "units": "Jy/beam",
-    "type": "model"
+    "units": "",
+    "type": "mask"
   },
   "dimension_names": [
     "time",

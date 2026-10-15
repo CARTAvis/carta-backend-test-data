@@ -1,6 +1,6 @@
 {
   "shape": [
-    1,
+    2,
     3,
     2,
     4,
@@ -43,7 +43,7 @@
   ],
   "attributes": {
     "units": "Jy/beam",
-    "type": "model"
+    "type": "sky"
   },
   "dimension_names": [
     "time",

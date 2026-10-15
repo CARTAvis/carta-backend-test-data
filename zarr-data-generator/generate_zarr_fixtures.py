@@ -22,6 +22,8 @@ from zarr.codecs import BloscCodec, BytesCodec, Crc32cCodec, GzipCodec, ZstdCode
 
 
 OUTPUT_DIR = Path(__file__).parent.parent / "images" / "zarr"
+# The XRADIO image schema every XRADIO fixture here is written to, and the only one carta-zarr reads.
+SCHEMA_VERSION = "0.0.2"
 STRING_VALUES = np.asarray(["A", "BC"], dtype="U2")
 
 
@@ -175,10 +177,8 @@ def add_consolidated_metadata(path: Path) -> None:
     root_metadata_path.write_text(json.dumps(root_metadata, indent=2) + "\n")
 
 
-def generate_xradio_fixture(
-    path: Path, *, typed: bool, consolidated: bool, uniform_beams: bool = False, times: int = 1
-) -> None:
-    """The multi-image XRADIO reference dataset.
+def generate_xradio_fixture(path: Path, *, uniform_beams: bool = False, times: int = 1) -> None:
+    """The multi-image XRADIO reference dataset, of image schema 0.0.2.
 
     `times` is the length of the dataset's time coordinate, and so of every image in it: the
     coordinate is the dataset's, and an image's extent along an axis must be its coordinate's. More
@@ -188,6 +188,13 @@ def generate_xradio_fixture(
     root = zarr.open_group(store=path, mode="w", zarr_format=3)
     root.attrs.update(
         {
+            "type": "image_dataset",
+            "schema_version": SCHEMA_VERSION,
+            "data_groups": {
+                "base": {"sky": "SKY"},
+                "model": {"sky": "SKY_MODEL"},
+                "residual": {"sky": "SKY_RESIDUAL"},
+            },
             "coordinate_system_info": {
                 "projection": "SIN",
                 "reference_direction": {
@@ -197,19 +204,9 @@ def generate_xradio_fixture(
                 "native_pole_direction": {"data": [0.0, 1.5707963267948966]},
                 "projection_parameters": [0.25, -0.5],
                 "pixel_coordinate_transformation_matrix": [[1.0, 0.0], [0.0, 1.0]],
-            }
+            },
         }
     )
-    if typed:
-        root.attrs.update(
-            {
-                "type": "image_dataset",
-                "data_groups": {
-                    "base": {"sky": "SKY", "model": "MODEL", "residual": "RESIDUAL"},
-                    "deconvolution": {"sky": "SKY", "mask_deconvolve": "MASK_DECONVOLVE"},
-                },
-            }
-        )
 
     sky_shape = (times, 3, 2, 4, 5)
     create_numeric_array(
@@ -248,6 +245,8 @@ def generate_xradio_fixture(
         np.asarray([1.4e9, 1.401e9, 1.403e9], dtype=np.float64),
         dimension_names=("frequency",),
         attributes={
+            "units": "Hz",
+            "frame": "LSRK",
             "reference_frequency": {"data": 1.401e9, "attrs": {"units": "Hz", "observer": "lsrk"}},
             "rest_frequency": {"data": 1.420405751e9},
         },
@@ -298,25 +297,25 @@ def generate_xradio_fixture(
     )
 
     create_numeric_array(
-        path / "MODEL",
+        path / "SKY_MODEL",
         np.ones(sky_shape, dtype=np.float32),
         dimension_names=("time", "frequency", "polarization", "l", "m"),
         chunks=(1, 1, 1, 2, 5),
-        attributes={"units": "Jy/beam", "type": "model"},
+        attributes={"units": "Jy/beam", "type": "sky"},
     )
     create_numeric_array(
-        path / "RESIDUAL",
+        path / "SKY_RESIDUAL",
         np.full(sky_shape, 2.0, dtype=np.float32),
         dimension_names=("time", "frequency", "polarization", "l", "m"),
         chunks=(1, 1, 1, 2, 5),
-        attributes={"units": "Jy/beam", "type": "residual"},
+        attributes={"units": "Jy/beam", "type": "sky"},
     )
     create_numeric_array(
-        path / "MASK_DECONVOLVE",
+        path / "MASK",
         np.ones(sky_shape, dtype=np.float32),
         dimension_names=("time", "frequency", "polarization", "l", "m"),
         chunks=(1, 1, 1, 2, 5),
-        attributes={"units": "", "type": "mask_deconvolve"},
+        attributes={"units": "", "type": "mask"},
     )
     create_numeric_array(
         path / "MASK_0",
@@ -362,8 +361,7 @@ def generate_xradio_fixture(
         attributes={"type": "doppler", "units": "m/s"},
     )
 
-    if consolidated:
-        add_consolidated_metadata(path)
+    add_consolidated_metadata(path)
 
 
 def generate_pixel_fixture(path: Path, *, l_fastest: bool = False) -> None:
@@ -394,6 +392,7 @@ def generate_pixel_fixture(path: Path, *, l_fastest: bool = False) -> None:
     root.attrs.update(
         {
             "type": "image_dataset",
+            "schema_version": SCHEMA_VERSION,
             "data_groups": {"base": {"sky": "SKY"}},
             "coordinate_system_info": {
                 "projection": "SIN",
@@ -482,7 +481,7 @@ def generate_pixel_fixture(path: Path, *, l_fastest: bool = False) -> None:
         path / "frequency",
         np.asarray([1.4e9, 1.401e9], dtype=np.float64),
         dimension_names=("frequency",),
-        attributes={"rest_frequency": {"data": 1.420405751e9}},
+        attributes={"units": "Hz", "frame": "LSRK", "rest_frequency": {"data": 1.420405751e9}},
     )
     create_numeric_array(
         path / "time",
@@ -526,6 +525,7 @@ def generate_wide_pixel_fixture(path: Path) -> None:
     root.attrs.update(
         {
             "type": "image_dataset",
+            "schema_version": SCHEMA_VERSION,
             "data_groups": {"base": {"sky": "SKY"}},
             "coordinate_system_info": {
                 "projection": "SIN",
@@ -591,7 +591,7 @@ def generate_wide_pixel_fixture(path: Path) -> None:
         path / "frequency",
         1.4e9 + np.arange(frequency_size, dtype=np.float64) * 1e6,
         dimension_names=("frequency",),
-        attributes={"rest_frequency": {"data": 1.420405751e9}},
+        attributes={"units": "Hz", "frame": "LSRK", "rest_frequency": {"data": 1.420405751e9}},
     )
     create_numeric_array(
         path / "time",
@@ -616,12 +616,10 @@ def main() -> None:
         shutil.rmtree(OUTPUT_DIR / owned, ignore_errors=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     generate_string_fixtures()
-    generate_xradio_fixture(OUTPUT_DIR / "xradio" / "minimal", typed=True, consolidated=True)
-    generate_xradio_fixture(
-        OUTPUT_DIR / "xradio" / "uniform_beam", typed=True, consolidated=True, uniform_beams=True
-    )
+    generate_xradio_fixture(OUTPUT_DIR / "xradio" / "minimal")
+    generate_xradio_fixture(OUTPUT_DIR / "xradio" / "uniform_beam", uniform_beams=True)
     generate_pixel_fixture(OUTPUT_DIR / "pixels")
-    generate_xradio_fixture(OUTPUT_DIR / "xradio" / "time_axis", typed=True, consolidated=True, times=2)
+    generate_xradio_fixture(OUTPUT_DIR / "xradio" / "time_axis", times=2)
 
 
 if __name__ == "__main__":

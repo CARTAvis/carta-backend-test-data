@@ -42,8 +42,8 @@
     }
   ],
   "attributes": {
-    "units": "",
-    "type": "mask_deconvolve"
+    "units": "Jy/beam",
+    "type": "sky"
   },
   "dimension_names": [
     "time",

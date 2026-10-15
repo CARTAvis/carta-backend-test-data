@@ -43,7 +43,7 @@
   ],
   "attributes": {
     "units": "Jy/beam",
-    "type": "residual"
+    "type": "sky"
   },
   "dimension_names": [
     "time",

@@ -1,6 +1,6 @@
 {
   "shape": [
-    1,
+    2,
     3,
     2,
     4,
@@ -42,8 +42,8 @@
     }
   ],
   "attributes": {
-    "units": "Jy/beam",
-    "type": "residual"
+    "units": "",
+    "type": "mask"
   },
   "dimension_names": [
     "time",
