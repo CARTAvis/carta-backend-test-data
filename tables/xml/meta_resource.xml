@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A DALI-style response: a self-describing metadata resource precedes the results -->
+<VOTABLE version="1.4" xmlns="http://www.ivoa.net/xml/VOTable/v1.3">
+    <RESOURCE type="meta" utype="adhoc:this">
+        <DESCRIPTION>Self description and list of supported parameters</DESCRIPTION>
+        <GROUP name="inputParams">
+            <PARAM name="BAND" datatype="double" arraysize="2" unit="m" value="" xtype="interval">
+                <DESCRIPTION>Specify energy bounds</DESCRIPTION>
+            </PARAM>
+        </GROUP>
+        <PARAM name="accessURL" datatype="char" arraysize="*" value="https://example.org/SIA"/>
+    </RESOURCE>
+    <RESOURCE type="results">
+        <COOSYS ID="COOSYS" equinox="2000" epoch="J2000" system="ICRS"/>
+        <INFO name="QUERY_STATUS" value="OK"/>
+        <TABLE>
+            <FIELD ID="col1" name="RA" datatype="double" unit="deg"/>
+            <FIELD ID="col2" name="Dec" datatype="double" unit="deg"/>
+            <FIELD ID="col3" name="Name" datatype="char" arraysize="*"/>
+            <DATA>
+                <TABLEDATA>
+                    <TR>
+                        <TD>10.68</TD>
+                        <TD>41.27</TD>
+                        <TD>M31</TD>
+                    </TR>
+                    <TR>
+                        <TD>148.89</TD>
+                        <TD>69.07</TD>
+                        <TD>M81</TD>
+                    </TR>
+                </TABLEDATA>
+            </DATA>
+        </TABLE>
+    </RESOURCE>
+</VOTABLE>
