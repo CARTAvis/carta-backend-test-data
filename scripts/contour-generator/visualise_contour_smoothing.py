@@ -1,54 +1,11 @@
 import argparse
 import os
-import struct
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+from contour_io import read_contours
 from image_io import load_fits_image
-
-
-def read_contour(folder: str):
-    folder_name = os.path.basename(os.path.normpath(folder))
-    if not folder_name.isdigit():
-        raise ValueError(f"Contour level folder must have a numeric name: {folder}")
-    level_index = int(folder_name)
-    metadata_path = os.path.join(folder, f"{level_index}_metadata.bin")
-    vertices_path = os.path.join(folder, f"{level_index}_data.bin")
-
-    with open(metadata_path, "rb") as metadata_file:
-        metadata = metadata_file.read()
-    if len(metadata) < 8:
-        raise ValueError(f"Contour metadata is too short: {metadata_path}")
-
-    contour_level, contour_count = struct.unpack_from("<iI", metadata)
-    expected_size = 8 + contour_count * 8
-    if len(metadata) < expected_size:
-        raise ValueError(f"Contour metadata is truncated: {metadata_path}")
-    end_offsets = list(
-        struct.unpack_from(f"<{contour_count}Q", metadata, 8)
-    ) if contour_count else []
-
-    with open(vertices_path, "rb") as vertices_file:
-        vertex_data = vertices_file.read()
-    if len(vertex_data) % 8 != 0:
-        raise ValueError(f"Contour vertex data is not x/y-pair aligned: {vertices_path}")
-
-    vertices = np.frombuffer(vertex_data, dtype="<f4").reshape(-1, 2)
-    float_count = vertices.size
-    boundaries = [0, *end_offsets]
-    if boundaries[-1] != float_count:
-        boundaries.append(float_count)
-    if any(
-        boundary < 0
-        or boundary > float_count
-        or boundary % 2 != 0
-        for boundary in boundaries
-    ) or any(start > end for start, end in zip(boundaries, boundaries[1:])):
-        raise ValueError(f"Invalid contour boundaries in {metadata_path}")
-
-    point_boundaries = [boundary // 2 for boundary in boundaries]
-    return contour_level, vertices, point_boundaries
 
 
 def add_contours_to_image(
@@ -57,6 +14,11 @@ def add_contours_to_image(
     contour_folders: tuple[str, str],
     output_folder: str,
 ):
+    """Save a comparison image of two contour sets over the source image.
+
+    The contour folders must contain the same level. The output JPEG is written
+    to ``output_folder`` and named from ``image_name`` and that contour level.
+    """
     figure, axis = plt.subplots()
     image_cmap = plt.get_cmap("gray").copy()
     image_cmap.set_bad("yellow")
@@ -67,7 +29,7 @@ def add_contours_to_image(
     empty_folders = []
     colors = ("tab:blue", "tab:orange")
     for folder, color in zip(contour_folders, colors):
-        contour_level, vertices, boundaries = read_contour(folder)
+        contour_level, vertices, boundaries = read_contours(folder)
         contour_levels.append(contour_level)
         if len(vertices) == 0:
             empty_folders.append(folder)
@@ -113,6 +75,7 @@ def add_contours_to_image(
 
 
 def main():
+    """Parse command-line arguments and create the contour comparison image."""
     parser = argparse.ArgumentParser(
         description="Plot two contour levels on a FITS image."
     )
@@ -128,7 +91,7 @@ def main():
     args = parser.parse_args()
 
     image_name = os.path.splitext(os.path.basename(args.filename))[0]
-    image = load_fits_image.load_fits_image(args.filename)
+    image = load_fits_image(args.filename)
     output_folder = os.path.dirname(os.path.abspath(args.filename))
     add_contours_to_image(
         image,
