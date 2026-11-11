@@ -1,7 +1,7 @@
 # Contour generator
 
 These scripts request contour data from the CARTA backend, save it in binary
-files, and provide utilities to inspect or visualize the results.
+files, and provide utilities to inspect or visualise the results.
 
 ## Requirements
 
@@ -63,11 +63,30 @@ mode, for example `500x500_contours_GaussianBlur/`. It contains top-level
 metadata and numbered subdirectories with per-message contour metadata and
 coordinate data. The contour values are stored in the metadata.
 
-## Inspect and visualize
+## Inspect and visualise
 
 - `inspect_contours.py` prints the contents of a generated contour directory.
 - `visualise_contours.py` overlays several contour levels on an image.
+- Pass the input image and contour folder to visualise over an image:
+
+  ```bash
+  python3 visualise_contours.py /path/to/image.fits /path/to/contours
+  ```
+
+- To render contours without a background image, pass `--no-background` and
+  only the contour folder. The input image is not loaded:
+
+  ```bash
+  python3 visualise_contours.py /path/to/contours --no-background
+  ```
+
+- Use `--levels` to select contour level indices; it defaults to `0 50 100 150 200`:
+
+  ```bash
+  python3 visualise_contours.py /path/to/contours --no-background --levels 0 1 2
+  ```
+
 - `visualise_contour_smoothing.py` compares two contour outputs for the same
   contour level.
-- `read_fits_file.py` summarizes a FITS file, and `add_nans_to_image.py` can
+- `read_fits_file.py` summarises a FITS file, and `add_nans_to_image.py` can
   replace a selected pixel value with NaNs.

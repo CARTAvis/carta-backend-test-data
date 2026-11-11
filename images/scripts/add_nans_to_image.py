@@ -47,6 +47,4 @@ def main():
     print(f"Saving image: {args.filename}")
     save_new_fits_image(f"{args.filename}_new", image)
 
-
-if __name__ == "__main__":
-    main()
+main()

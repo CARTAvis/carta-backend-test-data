@@ -137,6 +137,4 @@ def main():
 
     inspect_folder(args.folder, None if args.max_points == 0 else args.max_points)
 
-
-if __name__ == "__main__":
-    main()
+main()

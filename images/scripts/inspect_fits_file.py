@@ -50,6 +50,4 @@ def main():
 
     print_fits_contents(args.filename)
 
-
-if __name__ == "__main__":
-    main()
+main()

@@ -21,12 +21,10 @@ def parse_args():
     parser.add_argument("image", help="Path to input image")
     parser.add_argument(
         "--backend-executable",
-        default="/home/michaela/Desktop/carta/carta-backend/build/carta_backend",
         help="Path to the CARTA backend executable",
     )
     parser.add_argument(
         "--frontend-folder",
-        default="/home/michaela/Desktop/carta/carta-frontend/build",
         help="Path to the CARTA frontend build directory",
     )
     parser.add_argument(
@@ -35,7 +33,7 @@ def parse_args():
         nargs="+",
         help="Contour levels (a sequence of numbers; can be floating point)",
     )
-    parser.add_argument("--output-dir", help="Path to output parent directory", default=".")
+    parser.add_argument("--output-dir", help="Path to output parent directory")
     parser.add_argument(
         "--smoothing",
         type=SmoothingMode.Value,
@@ -113,6 +111,4 @@ def main():
         except ProcessLookupError:
             print("Could not shut down backend because it was no longer running.")
 
-
-if __name__ == "__main__":
-    main()
+main()

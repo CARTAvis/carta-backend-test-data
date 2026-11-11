@@ -9,20 +9,21 @@ from image_io import load_fits_image
 
 
 def add_contours_to_image(
-    image: np.ndarray,
+    image: np.ndarray | None,
     levels: list[int],
     output_image: str = "contour_multi",
     folder_name: str = "",
 ):
-    """Plot each requested contour level over an image and save a JPEG.
+    """Plot each requested contour level, optionally over an image, and save a JPEG.
 
     Contour data is read from numbered subfolders under ``folder_name``. The
     output is saved there when provided, or in the current directory otherwise.
     """
     fig, ax = plt.subplots()
-    image_cmap = plt.get_cmap("gray").copy()
-    image_cmap.set_bad("yellow")
-    ax.imshow(image, cmap=image_cmap)
+    if image is not None:
+        image_cmap = plt.get_cmap("gray").copy()
+        image_cmap.set_bad("yellow")
+        ax.imshow(image, cmap=image_cmap)
 
     cmap = plt.get_cmap("tab10")
 
@@ -62,12 +63,23 @@ def add_contours_to_image(
 
 
 def main():
-    """Parse command-line arguments and render contours over the input image."""
+    """Parse command-line arguments and render contours with an optional image."""
     parser = argparse.ArgumentParser(
         description="Visualise contours on original image."
     )
-    parser.add_argument("filename", help="Input image file (.fits or .h5)")
-    parser.add_argument("folder", help="Folder where the saved data is")
+    parser.add_argument(
+        "filename",
+        nargs="?",
+        help="Input image file (.fits or .h5); omit with --no-background",
+    )
+    parser.add_argument(
+        "folder",
+        nargs="?",
+        help=(
+            "Folder where the saved data is (or the only positional argument "
+            "with --no-background)"
+        ),
+    )
     parser.add_argument(
         "--levels",
         nargs="+",
@@ -75,15 +87,34 @@ def main():
         default=[0, 50, 100, 150, 200],
         help="The number of levels",
     )
+    parser.add_argument(
+        "--no-background",
+        action="store_true",
+        help="Save the contours without loading or displaying the input image",
+    )
 
     args = parser.parse_args()
 
-    print(f"Reading image: {args.filename}")
-    image = load_fits_image(args.filename)
+    if args.no_background:
+        folder = args.folder or args.filename
+        if folder is None:
+            parser.error("a contour folder is required")
+    else:
+        if args.filename is None or args.folder is None:
+            parser.error(
+                "filename and folder are required unless --no-background is set"
+            )
+        folder = args.folder
 
-    print(f"Saving image contours onto image: {args.filename}")
-    add_contours_to_image(image, args.levels, "with_contours", args.folder)
+    image = None
+    if not args.no_background:
+        print(f"Reading image: {args.filename}")
+        image = load_fits_image(args.filename)
 
+    if args.no_background:
+        print("Saving contours without a background image")
+    else:
+        print(f"Saving image contours onto image: {args.filename}")
+    add_contours_to_image(image, args.levels, "with_contours", folder)
 
-if __name__ == "__main__":
-    main()
+main()

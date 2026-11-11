@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
-/scripts/contour-generator/config.mk
+config.mk
 
 # --- Virtual Environment ---
 .venv/
