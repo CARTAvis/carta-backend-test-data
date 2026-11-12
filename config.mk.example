@@ -1,0 +1,9 @@
+# Copy this file to config.mk and update the paths for your system.
+# The local config.mk is ignored by Git.
+
+PYTHON := $(HOME)/.venvs/carta-contours/bin/python3
+BACKEND_EXECUTABLE := /path/to/carta-backend/build/carta_backend
+FRONTEND_FOLDER := /path/to/carta-frontend/build
+
+# Optional overrides:
+# OUTPUT_DIR := /path/to/contours

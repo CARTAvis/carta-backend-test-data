@@ -1,0 +1,103 @@
+import argparse
+import os
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from contour_io import read_contours
+from image_io import load_fits_image
+
+
+def add_contours_to_image(
+    image: np.ndarray,
+    image_name: str,
+    contour_folders: tuple[str, str],
+    output_folder: str,
+):
+    """Save a comparison image of two contour sets over the source image.
+
+    The contour folders must contain the same level. The output JPEG is written
+    to ``output_folder`` and named from ``image_name`` and that contour level.
+    """
+    figure, axis = plt.subplots()
+    image_cmap = plt.get_cmap("gray").copy()
+    image_cmap.set_bad("yellow")
+    axis.imshow(image, cmap=image_cmap)
+
+    contour_levels = []
+    plotted_folders = []
+    empty_folders = []
+    colors = ("tab:blue", "tab:orange")
+    for folder, color in zip(contour_folders, colors):
+        contour_level, vertices, boundaries = read_contours(folder)
+        contour_levels.append(contour_level)
+        if len(vertices) == 0:
+            empty_folders.append(folder)
+            continue
+
+        plotted_folders.append(folder)
+        label = os.path.basename(os.path.dirname(os.path.normpath(folder)))
+
+        for start, end in zip(boundaries, boundaries[1:]):
+            segment = vertices[start:end]
+            if len(segment):
+                axis.plot(
+                    segment[:, 0],
+                    segment[:, 1],
+                    linewidth=0.7,
+                    color=color,
+                    label=label,
+                )
+                label = ""
+
+    if len(set(contour_levels)) != 1:
+        raise ValueError(
+            "The selected folders contain different contour levels: "
+            f"{contour_levels}"
+        )
+    if empty_folders:
+        print(f"Warning: no contour vertices found in: {', '.join(empty_folders)}")
+    if not plotted_folders:
+        raise ValueError(
+            "Neither contour folder contains vertices. Choose folders for a level "
+            "that has contours."
+        )
+
+    axis.axis("off")
+    axis.legend(loc="lower left")
+
+    output_path = os.path.join(
+        output_folder, f"{image_name}_contour_comparison_level_{contour_levels[0]}.jpg"
+    )
+    figure.savefig(output_path, format="jpg", dpi=300, bbox_inches="tight")
+    plt.close(figure)
+    print(f"Image saved to: {output_path}")
+
+
+def main():
+    """Parse command-line arguments and create the contour comparison image."""
+    parser = argparse.ArgumentParser(
+        description="Plot two contour levels on a FITS image."
+    )
+    parser.add_argument("filename", help="Input FITS image file")
+    parser.add_argument(
+        "contour_folder_1",
+        help="First numeric contour-level folder, e.g. contours/example-none/0",
+    )
+    parser.add_argument(
+        "contour_folder_2",
+        help="Second numeric contour-level folder, e.g. contours/example-gaussian/0",
+    )
+    args = parser.parse_args()
+
+    image_name = os.path.splitext(os.path.basename(args.filename))[0]
+    image = load_fits_image(args.filename)
+    output_folder = os.path.dirname(os.path.abspath(args.filename))
+    add_contours_to_image(
+        image,
+        image_name,
+        (args.contour_folder_1, args.contour_folder_2),
+        output_folder,
+    )
+
+main()
