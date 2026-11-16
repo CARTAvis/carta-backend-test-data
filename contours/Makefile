@@ -5,11 +5,11 @@
 # Or use a config.mk to specify command line values
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-REPO_ROOT := $(abspath $(MAKEFILE_DIR))
+REPO_ROOT := $(abspath $(MAKEFILE_DIR))../
 -include $(MAKEFILE_DIR)config.mk
 
-GET_CONTOURS := $(MAKEFILE_DIR)contours/scripts/contour-generator/get_contours.py
-OUTPUT_DIR ?= $(REPO_ROOT)/contours
+GET_CONTOURS := $(MAKEFILE_DIR)scripts/contour-generator/get_contours.py
+OUTPUT_DIR ?= $(MAKEFILE_DIR)
 INPUT_DIR ?= $(REPO_ROOT)/images/fits
 
 PYTHON ?= $(HOME)/.venvs/carta-contours/bin/python3
